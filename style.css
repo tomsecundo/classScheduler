@@ -271,3 +271,15 @@ body.control-modal-open { overflow: hidden; }
   color: #5f6f87;
   font-weight: 700;
 }
+
+/* Teaching load batch assignment */
+.load-sections-block { min-height: 0; }
+.inline-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.inline-toolbar .field-label { margin-bottom: 0; }
+.inline-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
+.mini-search { width: min(220px, 100%); padding: 8px 10px; border-radius: 10px; font-size: 0.82rem; }
+@media (max-width: 720px) {
+  .inline-toolbar { align-items: stretch; }
+  .inline-actions { width: 100%; justify-content: flex-start; }
+  .mini-search { width: 100%; }
+}

@@ -473,16 +473,12 @@
       <div class="control-modal-body">
         <form id="teachingLoadForm" class="stacked-form compact-settings-form load-modal-grid">
           <label>
-            Section
-            <select id="loadSection" required></select>
+            Teacher
+            <select id="loadTeacher" required></select>
           </label>
           <label>
             Subject
             <select id="loadSubject" required></select>
-          </label>
-          <label>
-            Teacher
-            <select id="loadTeacher" required></select>
           </label>
           <label>
             Meetings / Week
@@ -504,15 +500,27 @@
             Manual Lab/Room
             <select id="loadManualRoom"></select>
           </label>
+          <div class="load-sections-block full-row">
+            <div class="inline-toolbar">
+              <p class="field-label">Assign to Sections</p>
+              <div class="inline-actions">
+                <input type="search" id="loadSectionFilter" class="mini-search" placeholder="Filter, e.g. Grade 7" />
+                <button id="loadSelectMatchingSections" type="button" class="secondary compact-btn">Select Matching</button>
+                <button id="loadSelectAllSections" type="button" class="secondary compact-btn">Select All</button>
+                <button id="loadClearSections" type="button" class="secondary compact-btn">Clear</button>
+              </div>
+            </div>
+            <div id="loadSectionChoices" class="section-checkbox-list"></div>
+          </div>
           <label class="checkbox-row full-row">
             <input type="checkbox" id="replaceExistingSchedule" checked />
             Replace current schedule when auto-generating
           </label>
-          <button id="loadSubmitBtn" type="submit" class="primary">Add Load</button>
+          <button id="loadSubmitBtn" type="submit" class="primary">Add Load(s)</button>
           <button id="loadCancelEdit" type="button" class="secondary hidden">Cancel Edit</button>
         </form>
         <ul id="teachingLoadList" class="item-list modal-list"></ul>
-        <p class="hint">Use this for subject loads such as Math 5x/week or ICT Lab 2x/week. Lab loads can request auto or manual room assignment.</p>
+        <p class="hint">Use this to assign one teacher and subject to several sections at once, such as Santos teaching English 1 for all Grade 7 sections. Lab loads can request auto or manual room assignment.</p>
       </div>
     </section>
   </div>

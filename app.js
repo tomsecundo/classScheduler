@@ -32,7 +32,7 @@ const els = {
   confirmModal: $('confirmModal'), confirmTitle: $('confirmTitle'), confirmMessage: $('confirmMessage'), confirmCloseBtn: $('confirmCloseBtn'), confirmCancelBtn: $('confirmCancelBtn'), confirmActionBtn: $('confirmActionBtn'),
   sectionForm: $('sectionForm'), subjectForm: $('subjectForm'), teacherForm: $('teacherForm'), teacherStartTime: $('teacherStartTime'), roomForm: $('roomForm'), settingsForm: $('settingsForm'), scheduleForm: $('scheduleForm'), teachingLoadForm: $('teachingLoadForm'), syncForm: $('syncForm'),
   scheduleSection: $('scheduleSection'), scheduleSubject: $('scheduleSubject'), scheduleTeacher: $('scheduleTeacher'), scheduleDay: $('scheduleDay'), scheduleStart: $('scheduleStart'), scheduleDuration: $('scheduleDuration'), roomMode: $('roomMode'), manualRoomWrap: $('manualRoomWrap'), manualRoom: $('manualRoom'),
-  loadSection: $('loadSection'), loadSubject: $('loadSubject'), loadTeacher: $('loadTeacher'), loadMeetings: $('loadMeetings'), loadDuration: $('loadDuration'), loadRoomMode: $('loadRoomMode'), loadManualRoomWrap: $('loadManualRoomWrap'), loadManualRoom: $('loadManualRoom'), teachingLoadList: $('teachingLoadList'), replaceExistingSchedule: $('replaceExistingSchedule'),
+  loadSubject: $('loadSubject'), loadTeacher: $('loadTeacher'), loadMeetings: $('loadMeetings'), loadDuration: $('loadDuration'), loadRoomMode: $('loadRoomMode'), loadManualRoomWrap: $('loadManualRoomWrap'), loadManualRoom: $('loadManualRoom'), teachingLoadList: $('teachingLoadList'), replaceExistingSchedule: $('replaceExistingSchedule'), loadSectionChoices: $('loadSectionChoices'), loadSectionFilter: $('loadSectionFilter'), loadSelectAllSections: $('loadSelectAllSections'), loadClearSections: $('loadClearSections'), loadSelectMatchingSections: $('loadSelectMatchingSections'),
   fixedActivityForm: $('fixedActivityForm'), fixedTitle: $('fixedTitle'), fixedStart: $('fixedStart'), fixedDuration: $('fixedDuration'), fixedSectionFilter: $('fixedSectionFilter'), fixedSectionChoices: $('fixedSectionChoices'), fixedActivityList: $('fixedActivityList'), fixedLunchPreset: $('fixedLunchPreset'), fixedFlagCeremonyPreset: $('fixedFlagCeremonyPreset'), fixedFlagRetreatPreset: $('fixedFlagRetreatPreset'), fixedSelectAllSections: $('fixedSelectAllSections'), fixedClearSections: $('fixedClearSections'), fixedSelectMatchingSections: $('fixedSelectMatchingSections'),
   sectionList: $('sectionList'), subjectList: $('subjectList'), teacherList: $('teacherList'), roomList: $('roomList'), scheduleTable: $('scheduleTable'), filterSection: $('filterSection'), filterDay: $('filterDay'), showFixedSchedules: $('showFixedSchedules'),
   dayStart: $('dayStart'), dayEnd: $('dayEnd'), slotDuration: $('slotDuration'), dayStartMonday: $('dayStartMonday'), dayStartTuesday: $('dayStartTuesday'), dayStartWednesday: $('dayStartWednesday'), dayStartThursday: $('dayStartThursday'), dayStartFriday: $('dayStartFriday'), mondayFlagPatternBtn: $('mondayFlagPatternBtn'), importFile: $('importFile'), exportBtn: $('exportBtn'), printBtn: $('printBtn'), exportSpreadsheetBtn: $('exportSpreadsheetBtn'), exportSpreadsheetSideBtn: $('exportSpreadsheetSideBtn'), browseSectionsBtn: $('browseSectionsBtn'), browseTeachersBtn: $('browseTeachersBtn'), clearScheduleForm: $('clearScheduleForm'), autoGenerateBtn: $('autoGenerateBtn'), masterResetScheduleBtn: $('masterResetScheduleBtn'),
@@ -426,14 +426,18 @@ function resetTeachingLoadFormMode(options = {}) {
   if (els.loadDuration) els.loadDuration.value = 50;
   if (els.loadRoomMode) els.loadRoomMode.value = 'default';
   if (els.loadManualRoomWrap) els.loadManualRoomWrap.classList.add('hidden');
-  setButtonText('loadSubmitBtn', 'Add Load');
+  if (els.loadSectionFilter) els.loadSectionFilter.value = '';
+  setAllLoadSections(false);
+  setButtonText('loadSubmitBtn', 'Add Load(s)');
   setHidden('loadCancelEdit', true);
 }
 function setTeachingLoadEditMode(id) {
   const load = data.teachingLoads.find(item => item.id === id);
   if (!load) return showAlert('Teaching load not found.', 'error');
   enterEditMode('teachingLoads', id);
-  els.loadSection.value = load.sectionId || '';
+  if (els.loadSectionFilter) els.loadSectionFilter.value = '';
+  renderLoadSectionChoices();
+  setLoadSections([load.sectionId].filter(Boolean));
   els.loadSubject.value = load.subjectId || '';
   els.loadTeacher.value = load.teacherId || '';
   els.loadMeetings.value = load.meetings || 1;
@@ -622,6 +626,39 @@ function renderTeachingLoadList() {
   });
 }
 
+
+function renderLoadSectionChoices() {
+  if (!els.loadSectionChoices) return;
+  const selected = new Set([...els.loadSectionChoices.querySelectorAll('input:checked')].map(input => input.value));
+  if (!data.sections.length) {
+    els.loadSectionChoices.innerHTML = '<p class="muted-note">Add sections first, then select sections here.</p>';
+    return;
+  }
+  els.loadSectionChoices.innerHTML = sortByName(data.sections).map(section => `
+    <label class="checkbox-row mini-check">
+      <input type="checkbox" class="load-section-checkbox" value="${escapeHtml(section.id)}" ${selected.has(section.id) ? 'checked' : ''} />
+      <span>${escapeHtml(section.name)}${section.size ? ` · ${Number(section.size)} students` : ''}</span>
+    </label>`).join('');
+}
+function getSelectedLoadSections() { return [...document.querySelectorAll('.load-section-checkbox:checked')].map(input => input.value); }
+function setLoadSections(sectionIds) {
+  const selected = new Set(sectionIds || []);
+  document.querySelectorAll('.load-section-checkbox').forEach(input => { input.checked = selected.has(input.value); });
+}
+function setAllLoadSections(checked) { document.querySelectorAll('.load-section-checkbox').forEach(input => { input.checked = checked; }); }
+function selectMatchingLoadSections() {
+  const query = String(els.loadSectionFilter?.value || '').trim().toLowerCase();
+  if (!query) return showAlert('Type a grade level or keyword first, for example Grade 7.', 'warning');
+  let count = 0;
+  document.querySelectorAll('.load-section-checkbox').forEach(input => {
+    const section = data.sections.find(item => item.id === input.value);
+    const match = section?.name?.toLowerCase().includes(query);
+    input.checked = Boolean(match);
+    if (match) count++;
+  });
+  showAlert(`${count} section(s) selected for this teaching load.`);
+}
+
 function scheduledClassCount() { return data.schedules.filter(item => !isFixedSchedule(item)).length; }
 function totalStudentCount() { return data.sections.reduce((sum, section) => sum + Number(section.size || 0), 0); }
 function setText(el, text) { if (el) el.textContent = text; }
@@ -654,6 +691,7 @@ function renderLists() {
   renderItemList(els.teacherList, data.teachers, 'teachers', item => teacherStartLabel(item));
   renderItemList(els.roomList, data.rooms, 'rooms', item => item.capacity ? `Capacity ${item.capacity}` : 'Laboratory / special room');
   renderTeachingLoadList();
+  renderLoadSectionChoices();
   renderFixedSectionChoices();
   renderFixedActivityList();
 }
@@ -662,9 +700,8 @@ function renderSelects() {
   renderOptions(els.scheduleSubject, data.subjects, 'Choose subject', item => `${item.name} - ${item.duration || 50} mins`);
   renderOptions(els.scheduleTeacher, data.teachers, 'Choose teacher', item => `${item.name} · ${teacherStartLabel(item)}`);
   renderOptions(els.manualRoom, data.rooms, 'Choose lab/room', item => item.capacity ? `${item.name} (${item.capacity})` : item.name);
-  renderOptions(els.loadSection, data.sections, 'Choose section', item => item.size ? `${item.name} (${item.size})` : item.name);
-  renderOptions(els.loadSubject, data.subjects, 'Choose subject', item => `${item.name} - ${item.duration || 50} mins`);
   renderOptions(els.loadTeacher, data.teachers, 'Choose teacher', item => `${item.name} · ${teacherStartLabel(item)}`);
+  renderOptions(els.loadSubject, data.subjects, 'Choose subject', item => `${item.name} - ${item.duration || 50} mins`);
   renderOptions(els.loadManualRoom, data.rooms, 'Choose lab/room', item => item.capacity ? `${item.name} (${item.capacity})` : item.name);
 }
 function renderSettings() {
@@ -1167,23 +1204,49 @@ function addTeachingLoad() {
   const roomMode = els.loadRoomMode.value || 'default';
   const duration = Number(els.loadDuration.value || 50);
   const meetings = Number(els.loadMeetings.value || 1);
+  const teacherId = els.loadTeacher.value;
+  const subjectId = els.loadSubject.value;
+  const sectionIds = getSelectedLoadSections();
+  if (!teacherId) return showAlert('Choose a teacher first.', 'warning');
+  if (!subjectId) return showAlert('Choose a subject.', 'warning');
+  if (!sectionIds.length) return showAlert('Select at least one section for this teaching load.', 'warning');
   if (roomMode !== 'default' && !data.rooms.length) return showAlert('Add at least one laboratory/special room before assigning lab rooms.', 'warning');
   const roomId = roomMode === 'manual' ? els.loadManualRoom.value : DEFAULT_ROOM_ID;
   if (roomMode === 'manual' && !roomId) return showAlert('Choose a manual lab/room for this teaching load.', 'warning');
-  const load = { id: editingId || createId('load'), sectionId: els.loadSection.value, subjectId: els.loadSubject.value, teacherId: els.loadTeacher.value, meetings, duration, roomMode, roomId };
-  const duplicate = data.teachingLoads.some(existing => existing.id !== editingId && existing.sectionId === load.sectionId && existing.subjectId === load.subjectId && existing.teacherId === load.teacherId && existing.roomMode === load.roomMode && existing.roomId === load.roomId);
-  if (duplicate) return showAlert('A similar teaching load already exists. Delete or adjust the existing load first.', 'warning');
-  if (editingId) {
-    const index = data.teachingLoads.findIndex(item => item.id === editingId);
-    if (index < 0) return showAlert('The teaching load you are editing could not be found.', 'error');
-    data.teachingLoads[index] = load;
-  } else {
-    data.teachingLoads.push(load);
-  }
+
+  let added = 0;
+  let updated = 0;
+  let skipped = 0;
+  const createdLoads = [];
+
+  sectionIds.forEach((sectionId, index) => {
+    const targetId = editingId && index === 0 ? editingId : null;
+    const load = { id: targetId || createId('load'), sectionId, subjectId, teacherId, meetings, duration, roomMode, roomId };
+    const duplicate = data.teachingLoads.some(existing => existing.id !== targetId && existing.sectionId === load.sectionId && existing.subjectId === load.subjectId && existing.teacherId === load.teacherId && existing.roomMode === load.roomMode && existing.roomId === load.roomId);
+    if (duplicate) { skipped++; return; }
+    if (targetId) {
+      const existingIndex = data.teachingLoads.findIndex(item => item.id === targetId);
+      if (existingIndex >= 0) {
+        data.teachingLoads[existingIndex] = load;
+        updated++;
+      } else {
+        data.teachingLoads.push(load);
+        added++;
+      }
+    } else {
+      createdLoads.push(load);
+      added++;
+    }
+  });
+
+  if (createdLoads.length) data.teachingLoads.push(...createdLoads);
+  if (!added && !updated) return showAlert('No teaching load was added. Similar load(s) may already exist.', 'warning');
   saveData();
   renderAll();
   resetTeachingLoadFormMode();
-  showAlert(`Teaching load ${editingId ? 'updated' : 'added'}.`);
+  const summary = [`${added} added`, `${updated} updated`];
+  if (skipped) summary.push(`${skipped} skipped as duplicate`);
+  showAlert(`Teaching load batch saved: ${summary.join(', ')}.`);
 }
 function deleteTeachingLoad(id) {
   data.teachingLoads = data.teachingLoads.filter(load => load.id !== id);
@@ -1363,6 +1426,9 @@ els.scheduleSubject.addEventListener('change', () => { const subject = data.subj
 if (els.scheduleDay) els.scheduleDay.addEventListener('change', renderTimeOptions);
 if (els.mondayFlagPatternBtn) els.mondayFlagPatternBtn.addEventListener('click', setMondayFlagPattern);
 els.loadSubject.addEventListener('change', () => { const subject = data.subjects.find(s => s.id === els.loadSubject.value); if (subject) els.loadDuration.value = subject.duration || 50; });
+if (els.loadSelectAllSections) els.loadSelectAllSections.addEventListener('click', () => setAllLoadSections(true));
+if (els.loadClearSections) els.loadClearSections.addEventListener('click', () => setAllLoadSections(false));
+if (els.loadSelectMatchingSections) els.loadSelectMatchingSections.addEventListener('click', selectMatchingLoadSections);
 els.roomMode.addEventListener('change', () => els.manualRoomWrap.classList.toggle('hidden', els.roomMode.value !== 'manual'));
 els.loadRoomMode.addEventListener('change', () => els.loadManualRoomWrap.classList.toggle('hidden', els.loadRoomMode.value !== 'manual'));
 els.scheduleForm.addEventListener('submit', e => {
