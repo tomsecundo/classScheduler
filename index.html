@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Offline Class Scheduler</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <h2>Class Scheduling & Room Assignment</h2>
+    </div>
+    <div class="header-actions">
+      <button id="printBtn" class="secondary">Print</button>
+      <button id="exportSpreadsheetBtn" class="secondary">Export Weekly XLSX</button>
+      <button id="exportBtn" class="primary">Export Backup</button>
+      <label class="file-btn">
+        Import Backup
+        <input type="file" id="importFile" accept="application/json" />
+      </label>
+    </div>
+  </header>
+
+  <div id="alert" class="alert hidden"></div>
+
+  <div id="messageModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle" aria-describedby="modalMessage">
+    <div class="modal-backdrop" data-modal-close></div>
+    <div class="modal-panel" role="document">
+      <button type="button" id="modalCloseBtn" class="modal-close" aria-label="Close dialog">&times;</button>
+      <div id="modalIcon" class="modal-icon">!</div>
+      <div>
+        <p id="modalTypeLabel" class="eyebrow modal-type">Attention Required</p>
+        <h2 id="modalTitle">Schedule Notice</h2>
+        <p id="modalMessage" class="modal-message"></p>
+      </div>
+      <div class="modal-actions">
+        <button type="button" id="modalOkBtn" class="primary">Okay</button>
+      </div>
+    </div>
+  </div>
+
+
+  <div id="confirmModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmMessage">
+    <div class="modal-backdrop" data-confirm-close></div>
+    <div class="modal-panel" role="document">
+      <button type="button" id="confirmCloseBtn" class="modal-close" aria-label="Close confirmation dialog">&times;</button>
+      <div class="modal-icon confirm-icon">?</div>
+      <div>
+        <p class="eyebrow modal-type">Confirmation Required</p>
+        <h2 id="confirmTitle">Confirm Action</h2>
+        <p id="confirmMessage" class="modal-message"></p>
+      </div>
+      <div class="modal-actions confirm-actions">
+        <button type="button" id="confirmCancelBtn" class="secondary">Cancel</button>
+        <button type="button" id="confirmActionBtn" class="danger">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <main class="app-shell">
+    <div class="main-column">
+      <section class="card schedule-card workflow-panel">
+        <div class="section-heading compact-heading">
+          <div>
+            <p class="eyebrow">Main Workflow</p>
+            <h2>Schedule a Class</h2>
+          </div>
+          <span class="pill">Section First</span>
+        </div>
+
+        <form id="scheduleForm" class="form-grid compact-workflow-grid">
+          <label>
+            Section
+            <select id="scheduleSection" required></select>
+          </label>
+
+          <label>
+            Subject
+            <select id="scheduleSubject" required></select>
+          </label>
+
+          <label>
+            Teacher
+            <select id="scheduleTeacher" required></select>
+          </label>
+
+          <label>
+            Day
+            <select id="scheduleDay" required>
+              <option>Monday</option>
+              <option>Tuesday</option>
+              <option>Wednesday</option>
+              <option>Thursday</option>
+              <option>Friday</option>
+            </select>
+          </label>
+
+          <label>
+            Start Time
+            <select id="scheduleStart" required></select>
+          </label>
+
+          <label>
+            Duration
+            <input type="number" id="scheduleDuration" min="10" step="5" value="50" required />
+          </label>
+
+          <label>
+            Room Assignment
+            <select id="roomMode">
+              <option value="default" selected>Default Classroom</option>
+              <option value="auto">Auto Lab/Room</option>
+              <option value="manual">Manual Lab/Room</option>
+            </select>
+          </label>
+
+          <label id="manualRoomWrap" class="hidden">
+            Manual Room
+            <select id="manualRoom"></select>
+          </label>
+
+          <div class="form-actions workflow-actions">
+            <button id="scheduleSubmitBtn" type="submit" class="primary">Add</button>
+            <button type="button" id="autoGenerateBtn" class="success">Auto Generate Week</button>
+            <button type="button" id="masterResetScheduleBtn" class="danger">Master Reset Weekly Schedule</button>
+            <button type="button" id="clearScheduleForm" class="secondary">Clear</button>
+            <button type="button" id="scheduleCancelEdit" class="secondary hidden">Cancel Edit</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="dashboard-stats no-print" aria-label="Dashboard summary counts">
+        <article class="stat-card">
+          <span id="statScheduledClasses">0</span>
+          <small>Classes Scheduled</small>
+        </article>
+        <article class="stat-card">
+          <span id="statTeachers">0</span>
+          <small>Teachers</small>
+        </article>
+        <article class="stat-card">
+          <span id="statStudents">0</span>
+          <small>Total Students</small>
+        </article>
+        <article class="stat-card">
+          <span id="statSubjects">0</span>
+          <small>Subjects</small>
+        </article>
+        <article class="stat-card">
+          <span id="statRooms">0</span>
+          <small>Rooms / Labs</small>
+        </article>
+      </section>
+
+      <section class="card table-card output-panel">
+        <div class="section-heading no-print">
+          <div>
+            <p class="eyebrow">Output</p>
+            <h2>Master Schedule</h2>
+          </div>
+          <div class="filters output-filters">
+            <label class="checkbox-row output-filter-check">
+              <input type="checkbox" id="showFixedSchedules" />
+              Show fixed schedules
+            </label>
+            <select id="filterSection"></select>
+            <select id="filterDay">
+              <option value="all">All Days</option>
+              <option>Monday</option>
+              <option>Tuesday</option>
+              <option>Wednesday</option>
+              <option>Thursday</option>
+              <option>Friday</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="print-title print-only">
+          <h1>Class Schedule and Room Assignment</h1>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Section</th>
+                <th>Day</th>
+                <th>Time</th>
+                <th>Subject</th>
+                <th>Teacher</th>
+                <th>Room</th>
+                <th class="no-print">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="scheduleTable"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <aside class="side-panel no-print" aria-label="Scheduler controls">
+      <div class="side-panel-header">
+        <p class="eyebrow">Control Panel</p>
+        <h2>Quick Actions</h2>
+        <p class="hint">Open each module in a focused dialog so the dashboard stays clean.</p>
+      </div>
+
+      <div class="control-button-grid" role="list" aria-label="Open scheduler modules">
+        <button type="button" class="control-action-btn" data-control-open="settings" role="listitem">
+          <span>School Day Settings</span>
+          <small>Slots, start, and end time</small>
+        </button>
+        <button type="button" class="control-action-btn" data-control-open="sections" role="listitem">
+          <span>Add / View Sections</span>
+          <small id="sectionButtonCount">0 sections</small>
+        </button>
+        <button type="button" class="control-action-btn" data-control-open="subjects" role="listitem">
+          <span>Add / View Subjects</span>
+          <small id="subjectButtonCount">0 subjects</small>
+        </button>
+        <button type="button" class="control-action-btn" data-control-open="teachers" role="listitem">
+          <span>Add / View Teachers</span>
+          <small id="teacherButtonCount">0 teachers</small>
+        </button>
+        <button type="button" class="control-action-btn" data-control-open="rooms" role="listitem">
+          <span>Add / View Rooms</span>
+          <small id="roomButtonCount">0 rooms</small>
+        </button>
+        <button type="button" class="control-action-btn" data-control-open="fixed" role="listitem">
+          <span>Lunch / Fixed Activities</span>
+          <small id="fixedButtonCount">0 fixed activities</small>
+        </button>
+        <button type="button" class="control-action-btn" data-control-open="loads" role="listitem">
+          <span>Teaching Loads</span>
+          <small id="loadButtonCount">0 teaching loads</small>
+        </button>
+        <button type="button" class="control-action-btn" data-control-open="sync" role="listitem">
+          <span>MongoDB Sync</span>
+          <small id="syncButtonStatus">Local mode</small>
+        </button>
+        <button type="button" id="browseSectionsBtn" class="control-action-btn" role="listitem">
+          <span>Browse Section Schedules</span>
+          <small>Open searchable section calendar tab</small>
+        </button>
+        <button type="button" id="browseTeachersBtn" class="control-action-btn" role="listitem">
+          <span>Browse Teacher Schedules</span>
+          <small>Open teacher weekly checker tab</small>
+        </button>
+        <button type="button" id="exportSpreadsheetSideBtn" class="control-action-btn" role="listitem">
+          <span>Export Weekly Spreadsheet</span>
+          <small>All section schedules in one XLSX</small>
+        </button>
+      </div>
+    </aside>
+  </main>
+
+
+
+  <div id="controlModal-settings" class="control-modal hidden no-print" role="dialog" aria-modal="true" aria-labelledby="controlTitle-settings">
+    <div class="control-modal-backdrop" data-control-modal-close></div>
+    <section class="control-modal-panel" role="document">
+      <button type="button" class="modal-close" data-control-modal-close aria-label="Close dialog">&times;</button>
+      <div class="control-modal-header">
+        <div>
+          <p class="eyebrow">Settings</p>
+          <h2 id="controlTitle-settings">School Day</h2>
+        </div>
+        <span class="count-pill">Time Slots</span>
+      </div>
+      <div class="control-modal-body">
+        <form id="settingsForm" class="stacked-form compact-settings-form modal-form-grid">
+          <label>
+            School Day Start
+            <input type="time" id="dayStart" value="07:30" />
+          </label>
+          <label>
+            School Day End
+            <input type="time" id="dayEnd" value="16:30" />
+          </label>
+          <label>
+            Slot Length
+            <input type="number" id="slotDuration" min="10" step="5" value="50" />
+          </label>
+          <button type="button" id="mondayFlagPatternBtn" class="secondary">Apply Monday Flag Pattern</button>
+
+          <div class="day-start-settings full-row">
+            <p class="field-label">Teaching Start Per Day</p>
+            <div class="day-start-grid">
+              <label>Monday <input type="time" id="dayStartMonday" value="07:50" /></label>
+              <label>Tuesday <input type="time" id="dayStartTuesday" value="07:30" /></label>
+              <label>Wednesday <input type="time" id="dayStartWednesday" value="07:30" /></label>
+              <label>Thursday <input type="time" id="dayStartThursday" value="07:30" /></label>
+              <label>Friday <input type="time" id="dayStartFriday" value="07:30" /></label>
+            </div>
+          </div>
+
+          <button type="submit" class="secondary">Update Slots</button>
+        </form>
+        <p class="hint">Use School Day Start for fixed activities like flag ceremony. Use Teaching Start Per Day for class slots. Example: Monday can start classes at 7:50 AM after a 7:30–7:50 flag ceremony, while Tuesday–Friday start at 7:30 AM.</p>
+      </div>
+    </section>
+  </div>
+
+  <div id="controlModal-sections" class="control-modal hidden no-print" role="dialog" aria-modal="true" aria-labelledby="controlTitle-sections">
+    <div class="control-modal-backdrop" data-control-modal-close></div>
+    <section class="control-modal-panel" role="document">
+      <button type="button" class="modal-close" data-control-modal-close aria-label="Close dialog">&times;</button>
+      <div class="control-modal-header">
+        <div>
+          <p class="eyebrow">Data</p>
+          <h2 id="controlTitle-sections">Sections</h2>
+        </div>
+        <span id="sectionCount" class="count-pill">0 sections</span>
+      </div>
+      <div class="control-modal-body">
+        <form id="sectionForm" class="inline-form modal-inline-form">
+          <input type="text" id="sectionName" placeholder="e.g., Grade 7 - A" required />
+          <input type="number" id="sectionSize" placeholder="Students" min="0" />
+          <button id="sectionSubmitBtn" class="primary" type="submit">Add Section</button>
+          <button id="sectionCancelEdit" class="secondary hidden" type="button">Cancel Edit</button>
+        </form>
+        <ul id="sectionList" class="item-list modal-list"></ul>
+      </div>
+    </section>
+  </div>
+
+  <div id="controlModal-subjects" class="control-modal hidden no-print" role="dialog" aria-modal="true" aria-labelledby="controlTitle-subjects">
+    <div class="control-modal-backdrop" data-control-modal-close></div>
+    <section class="control-modal-panel" role="document">
+      <button type="button" class="modal-close" data-control-modal-close aria-label="Close dialog">&times;</button>
+      <div class="control-modal-header">
+        <div>
+          <p class="eyebrow">Data</p>
+          <h2 id="controlTitle-subjects">Subjects</h2>
+        </div>
+        <span id="subjectCount" class="count-pill">0 subjects</span>
+      </div>
+      <div class="control-modal-body">
+        <form id="subjectForm" class="inline-form modal-inline-form">
+          <input type="text" id="subjectName" placeholder="e.g., Mathematics" required />
+          <input type="number" id="subjectDuration" placeholder="Mins" min="10" step="5" value="50" />
+          <button id="subjectSubmitBtn" class="primary" type="submit">Add Subject</button>
+          <button id="subjectCancelEdit" class="secondary hidden" type="button">Cancel Edit</button>
+        </form>
+        <ul id="subjectList" class="item-list modal-list"></ul>
+      </div>
+    </section>
+  </div>
+
+  <div id="controlModal-teachers" class="control-modal hidden no-print" role="dialog" aria-modal="true" aria-labelledby="controlTitle-teachers">
+    <div class="control-modal-backdrop" data-control-modal-close></div>
+    <section class="control-modal-panel" role="document">
+      <button type="button" class="modal-close" data-control-modal-close aria-label="Close dialog">&times;</button>
+      <div class="control-modal-header">
+        <div>
+          <p class="eyebrow">Data</p>
+          <h2 id="controlTitle-teachers">Teachers</h2>
+        </div>
+        <span id="teacherCount" class="count-pill">0 teachers</span>
+      </div>
+      <div class="control-modal-body">
+        <form id="teacherForm" class="inline-form modal-inline-form teacher-form-grid">
+          <input type="text" id="teacherName" placeholder="e.g., Mr. Santos" required />
+          <label class="compact-inline-label">
+            Official Start
+            <input type="time" id="teacherStartTime" value="07:30" required />
+          </label>
+          <button id="teacherSubmitBtn" class="primary" type="submit">Add Teacher</button>
+          <button id="teacherCancelEdit" class="secondary hidden" type="button">Cancel Edit</button>
+        </form>
+        <ul id="teacherList" class="item-list modal-list"></ul>
+      </div>
+    </section>
+  </div>
+
+  <div id="controlModal-rooms" class="control-modal hidden no-print" role="dialog" aria-modal="true" aria-labelledby="controlTitle-rooms">
+    <div class="control-modal-backdrop" data-control-modal-close></div>
+    <section class="control-modal-panel" role="document">
+      <button type="button" class="modal-close" data-control-modal-close aria-label="Close dialog">&times;</button>
+      <div class="control-modal-header">
+        <div>
+          <p class="eyebrow">Data</p>
+          <h2 id="controlTitle-rooms">Rooms / Laboratories</h2>
+        </div>
+        <span id="roomCount" class="count-pill">0 rooms</span>
+      </div>
+      <div class="control-modal-body">
+        <form id="roomForm" class="inline-form modal-inline-form">
+          <input type="text" id="roomName" placeholder="e.g., ICT Laboratory" required />
+          <input type="number" id="roomCapacity" placeholder="Capacity" min="0" />
+          <button id="roomSubmitBtn" class="primary" type="submit">Add Room</button>
+          <button id="roomCancelEdit" class="secondary hidden" type="button">Cancel Edit</button>
+        </form>
+        <ul id="roomList" class="item-list modal-list"></ul>
+      </div>
+    </section>
+  </div>
+
+  <div id="controlModal-fixed" class="control-modal hidden no-print" role="dialog" aria-modal="true" aria-labelledby="controlTitle-fixed">
+    <div class="control-modal-backdrop" data-control-modal-close></div>
+    <section class="control-modal-panel wide" role="document">
+      <button type="button" class="modal-close" data-control-modal-close aria-label="Close dialog">&times;</button>
+      <div class="control-modal-header">
+        <div>
+          <p class="eyebrow">Protected Time</p>
+          <h2 id="controlTitle-fixed">Fixed Activities & Lunch</h2>
+        </div>
+        <span id="fixedCount" class="count-pill">0 fixed activities</span>
+      </div>
+      <div class="control-modal-body">
+        <form id="fixedActivityForm" class="stacked-form compact-settings-form fixed-modal-grid">
+          <div class="preset-actions full-row">
+            <button type="button" id="fixedLunchPreset" class="secondary compact-btn">Lunch M-F</button>
+            <button type="button" id="fixedFlagCeremonyPreset" class="secondary compact-btn">Flag Ceremony</button>
+            <button type="button" id="fixedFlagRetreatPreset" class="secondary compact-btn">Flag Retreat</button>
+          </div>
+          <label>
+            Activity Name
+            <input type="text" id="fixedTitle" placeholder="e.g., Lunch Break" required />
+          </label>
+          <label>
+            Start Time
+            <select id="fixedStart" required></select>
+          </label>
+          <label>
+            Duration
+            <input type="number" id="fixedDuration" min="10" step="5" value="50" required />
+          </label>
+          <div>
+            <p class="field-label">Days</p>
+            <div class="days-row">
+              <label class="checkbox-row mini-check"><input type="checkbox" class="fixed-day-checkbox" value="Monday" /> Mon</label>
+              <label class="checkbox-row mini-check"><input type="checkbox" class="fixed-day-checkbox" value="Tuesday" /> Tue</label>
+              <label class="checkbox-row mini-check"><input type="checkbox" class="fixed-day-checkbox" value="Wednesday" /> Wed</label>
+              <label class="checkbox-row mini-check"><input type="checkbox" class="fixed-day-checkbox" value="Thursday" /> Thu</label>
+              <label class="checkbox-row mini-check"><input type="checkbox" class="fixed-day-checkbox" value="Friday" /> Fri</label>
+            </div>
+          </div>
+          <label>
+            Section Filter
+            <input type="text" id="fixedSectionFilter" placeholder="e.g., Grade 7" />
+          </label>
+          <div class="preset-actions">
+            <button type="button" id="fixedSelectMatchingSections" class="secondary compact-btn">Select Matching</button>
+            <button type="button" id="fixedSelectAllSections" class="secondary compact-btn">Select All</button>
+            <button type="button" id="fixedClearSections" class="secondary compact-btn">Clear</button>
+          </div>
+          <div class="fixed-sections-block full-row">
+            <p class="field-label">Apply to Sections</p>
+            <div id="fixedSectionChoices" class="section-checkbox-list"></div>
+          </div>
+          <button id="fixedSubmitBtn" type="submit" class="primary">Add Fixed Activity</button>
+          <button id="fixedCancelEdit" type="button" class="secondary hidden">Cancel Edit</button>
+        </form>
+        <ul id="fixedActivityList" class="item-list modal-list"></ul>
+        <p class="hint">Fixed activities are protected blocks. Auto Generate will skip them, and manual scheduling cannot overlap them.</p>
+      </div>
+    </section>
+  </div>
+
+  <div id="controlModal-loads" class="control-modal hidden no-print" role="dialog" aria-modal="true" aria-labelledby="controlTitle-loads">
+    <div class="control-modal-backdrop" data-control-modal-close></div>
+    <section class="control-modal-panel wide" role="document">
+      <button type="button" class="modal-close" data-control-modal-close aria-label="Close dialog">&times;</button>
+      <div class="control-modal-header">
+        <div>
+          <p class="eyebrow">Auto Generator</p>
+          <h2 id="controlTitle-loads">Teaching Loads</h2>
+        </div>
+        <span id="loadCount" class="count-pill">0 teaching loads</span>
+      </div>
+      <div class="control-modal-body">
+        <form id="teachingLoadForm" class="stacked-form compact-settings-form load-modal-grid">
+          <label>
+            Section
+            <select id="loadSection" required></select>
+          </label>
+          <label>
+            Subject
+            <select id="loadSubject" required></select>
+          </label>
+          <label>
+            Teacher
+            <select id="loadTeacher" required></select>
+          </label>
+          <label>
+            Meetings / Week
+            <input type="number" id="loadMeetings" min="1" max="20" step="1" value="1" required />
+          </label>
+          <label>
+            Duration
+            <input type="number" id="loadDuration" min="10" step="5" value="50" required />
+          </label>
+          <label>
+            Room Assignment
+            <select id="loadRoomMode">
+              <option value="default" selected>Default Classroom</option>
+              <option value="auto">Auto Lab/Room</option>
+              <option value="manual">Manual Lab/Room</option>
+            </select>
+          </label>
+          <label id="loadManualRoomWrap" class="hidden">
+            Manual Lab/Room
+            <select id="loadManualRoom"></select>
+          </label>
+          <label class="checkbox-row full-row">
+            <input type="checkbox" id="replaceExistingSchedule" checked />
+            Replace current schedule when auto-generating
+          </label>
+          <button id="loadSubmitBtn" type="submit" class="primary">Add Load</button>
+          <button id="loadCancelEdit" type="button" class="secondary hidden">Cancel Edit</button>
+        </form>
+        <ul id="teachingLoadList" class="item-list modal-list"></ul>
+        <p class="hint">Use this for subject loads such as Math 5x/week or ICT Lab 2x/week. Lab loads can request auto or manual room assignment.</p>
+      </div>
+    </section>
+  </div>
+
+  <div id="controlModal-sync" class="control-modal hidden no-print" role="dialog" aria-modal="true" aria-labelledby="controlTitle-sync">
+    <div class="control-modal-backdrop" data-control-modal-close></div>
+    <section class="control-modal-panel" role="document">
+      <button type="button" class="modal-close" data-control-modal-close aria-label="Close dialog">&times;</button>
+      <div class="control-modal-header">
+        <div>
+          <p class="eyebrow">Collaboration</p>
+          <h2 id="controlTitle-sync">MongoDB Server Sync</h2>
+        </div>
+        <span id="serverRevision" class="mini-pill">Local</span>
+      </div>
+      <div class="control-modal-body">
+        <form id="syncForm" class="stacked-form compact-settings-form">
+          <label class="checkbox-row">
+            <input type="checkbox" id="syncEnabled" />
+            Enable server sync
+          </label>
+          <label>
+            API Base URL
+            <input type="url" id="apiBaseUrl" placeholder="http://localhost:3000" />
+          </label>
+          <div class="sync-actions">
+            <button type="submit" class="secondary">Save Sync Settings</button>
+            <button type="button" id="syncPullBtn" class="secondary">Pull</button>
+            <button type="button" id="syncPushBtn" class="primary">Push</button>
+          </div>
+        </form>
+        <p id="syncStatus" class="sync-status muted">Server sync is off. Data is saved locally in this browser.</p>
+        
+      </div>
+    </section>
+  </div>
+
+  <template id="emptyRowTemplate">
+    <tr>
+      <td colspan="7" class="empty-state">No schedule yet. Add sections, subjects, teachers, and rooms first.</td>
+    </tr>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>

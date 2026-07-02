@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Weekly Schedule</title>
+  <link rel="stylesheet" href="weekly.css" />
+</head>
+<body>
+  <header>
+    <div>
+      <p id="viewEyebrow" class="eyebrow"></p>
+      <h2 id="viewTitle">Weekly Schedule</h2>
+      <p id="viewSubtitle" class="subtitle"></p>
+    </div>
+    <div class="actions">
+      <button id="editToggle" class="success" type="button">Edit Mode: Off</button>
+      <button id="refreshBtn" class="secondary" type="button">Refresh</button>
+      <button id="exportIcsBtn" class="secondary" type="button">Export iCal</button>
+      <button id="closeBtn" class="secondary" type="button">Close Tab</button>
+      <button id="printBtn" class="primary" type="button">Print Schedule</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="navigatorCard" class="navigator-card hidden no-print" aria-label="Schedule browser">
+      <label>
+        <span id="navigatorLabel">Choose schedule</span>
+        <select id="navigatorSelect"></select>
+      </label>
+      <p id="navigatorHint" class="navigator-hint">Use the dropdown to check schedules without returning to the main dashboard.</p>
+    </section>
+
+    <section class="summary">
+      <div class="metric"><small>Total Classes</small><strong id="totalClasses">0</strong></div>
+      <div class="metric"><small>Total Weekly Minutes</small><strong id="totalMinutes">0</strong></div>
+      <div class="metric"><small>Classes per Day</small><div id="dailySummary" class="daily-summary"></div></div>
+    </section>
+
+    <section id="editHelp" class="edit-help">
+      <strong>Editing mode is on.</strong> Drag a class block to another day or start time. The move saves automatically only when there is no section, teacher, or room conflict.
+    </section>
+
+    <section class="calendar-card">
+      <table id="weeklyTable" aria-label="Weekly schedule calendar">
+        <thead>
+          <tr>
+            <th>Monday Time</th>
+            <th>Monday</th>
+            <th>Tue-Fri Time</th>
+            <th>Tuesday</th>
+            <th>Wednesday</th>
+            <th>Thursday</th>
+            <th>Friday</th>
+          </tr>
+        </thead>
+        <tbody id="calendarBody"></tbody>
+      </table>
+    </section>
+
+    <p id="statusLine">Generated: <span id="generatedAt"></span></p>
+  </main>
+
+  <div id="messageModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle" aria-describedby="modalMessage">
+    <div class="modal-backdrop" data-modal-close></div>
+    <div class="modal-panel" role="document">
+      <button type="button" id="modalCloseBtn" class="modal-close" aria-label="Close dialog">&times;</button>
+      <div class="modal-icon">×</div>
+      <p class="eyebrow modal-label">Unable to Move Class</p>
+      <h2 id="modalTitle">Schedule Conflict</h2>
+      <p id="modalMessage" class="modal-message"></p>
+      <div class="modal-actions">
+        <button type="button" id="modalOkBtn" class="primary">Okay</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="weekly.js"></script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+<!doctype html><script>
+localStorage.setItem('offlineClassScheduler.v1', JSON.stringify({
+ settings:{dayStart:'07:30',dayEnd:'16:30',slotDuration:50},
+ sections:[{id:'sec1',name:'Grade 7 - Diamond',size:30}],
+ subjects:[{id:'sub1',name:'Math',duration:50},{id:'sub2',name:'Science',duration:50},{id:'sub3',name:'English',duration:50}],
+ teachers:[{id:'t1',name:'Teacher A'},{id:'t2',name:'Teacher B'}],
+ rooms:[{id:'r1',name:'Room 1',capacity:40}],
+ schedules:[
+   {id:'s1',sectionId:'sec1',subjectId:'sub1',teacherId:'t1',day:'Monday',start:'07:30',duration:50,roomId:'r1'},
+   {id:'s2',sectionId:'sec1',subjectId:'sub2',teacherId:'t2',day:'Tuesday',start:'08:20',duration:50,roomId:'r1'},
+   {id:'s3',sectionId:'sec1',subjectId:'sub3',teacherId:'t1',day:'Friday',start:'09:10',duration:50,roomId:'r1'}
+ ]
+}));
+location.href='weekly.html?kind=section&id=sec1';
+</script>
