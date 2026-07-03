@@ -416,9 +416,58 @@
             <button type="button" id="fixedFlagRetreatPreset" class="secondary compact-btn">Flag Retreat</button>
           </div>
           <label>
-            Activity Name
-            <input type="text" id="fixedTitle" placeholder="e.g., Lunch Break" required />
+            Fixed Slot Type
+            <select id="fixedType">
+              <option value="activity" selected>Activity / Lunch / Flag</option>
+              <option value="subject">Fixed Subject / Shared Class</option>
+              <option value="batch">Batch-Wide Subject Block / Elective / Research</option>
+            </select>
           </label>
+          <label>
+            Activity / Display Name
+            <input type="text" id="fixedTitle" placeholder="e.g., Lunch Break or Drone Technology" required />
+          </label>
+          <div id="fixedSubjectFields" class="full-row hidden fixed-subject-fields">
+            <div class="compact-settings-form fixed-subject-grid">
+              <label>
+                Subject
+                <select id="fixedSubject"></select>
+              </label>
+              <label>
+                Teacher
+                <select id="fixedTeacher"></select>
+              </label>
+              <label>
+                Room Assignment
+                <select id="fixedRoomMode">
+                  <option value="default" selected>Default Classroom</option>
+                  <option value="manual">Manual Room/Lab</option>
+                </select>
+              </label>
+              <label id="fixedManualRoomWrap" class="hidden">
+                Manual Room/Lab
+                <select id="fixedManualRoom"></select>
+              </label>
+            </div>
+            <p class="hint">Use Fixed Subject when learners from several sections attend one actual shared class with one teacher and one room.</p>
+          </div>
+          <div id="fixedBatchFields" class="full-row hidden fixed-subject-fields">
+            <div class="compact-settings-form">
+              <div class="full-row">
+                <div class="inline-toolbar">
+                  <p class="field-label">Teachers assigned during this batch-wide block</p>
+                  <div class="inline-actions">
+                    <input type="search" id="fixedTeacherFilter" class="mini-search" placeholder="Filter teacher name" />
+                    <button type="button" id="fixedTeacherSelectMatching" class="secondary compact-btn">Select Matching</button>
+                    <button type="button" id="fixedTeacherSelectAll" class="secondary compact-btn">Select All</button>
+                    <button type="button" id="fixedTeacherClear" class="secondary compact-btn">Clear</button>
+                  </div>
+                </div>
+                <div id="fixedTeacherChoices" class="section-checkbox-list"></div>
+              </div>
+            </div>
+            <p class="hint">Use Batch-Wide Subject Block for electives or research periods where all sections are blocked at the same time. Section calendars show only the display name, such as Elective. Selected teachers also show that same display name in their weekly schedule.</p>
+          </div>
           <label>
             Start Time
             <select id="fixedStart" required></select>
@@ -454,7 +503,7 @@
           <button id="fixedCancelEdit" type="button" class="secondary hidden">Cancel Edit</button>
         </form>
         <ul id="fixedActivityList" class="item-list modal-list"></ul>
-        <p class="hint">Fixed activities are protected blocks. Auto Generate will skip them, and manual scheduling cannot overlap them.</p>
+        <p class="hint">Fixed activities are protected blocks. Fixed subjects are for one shared class. Batch-wide blocks are for electives/research where sections see only the general label while assigned teachers are still booked.</p>
       </div>
     </section>
   </div>

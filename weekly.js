@@ -148,6 +148,15 @@ function timeRange(start, duration) { return `${formatTime(start)} - ${formatTim
 function overlaps(aStart, aDuration, bStart, bDuration) { const aEnd = toMinutes(aStart) + Number(aDuration || 0); const bEnd = toMinutes(bStart) + Number(bDuration || 0); return toMinutes(aStart) < bEnd && toMinutes(bStart) < aEnd; }
 function isDefaultRoom(roomId) { return !roomId || roomId === DEFAULT_ROOM_ID; }
 function byName(list, id) { if (isDefaultRoom(id)) return DEFAULT_ROOM_NAME; const match = list.find(item => item.id === id); if (match) return match.name; const nameMatch = list.find(item => item.name === id); return nameMatch ? nameMatch.name : 'Deleted Item'; }
+function isFixedSubjectActivity(activity) { return String(activity?.category || '').toLowerCase() === 'fixedsubject'; }
+function isBatchSubjectActivity(activity) { return ['batchsubject', 'batchfixedsubject', 'batch'].includes(String(activity?.category || '').toLowerCase()); }
+function isFixedTeachingActivity(activity) { return isFixedSubjectActivity(activity) || isBatchSubjectActivity(activity); }
+function isFixedSubjectSchedule(item) { return isFixedSchedule(item) && String(item?.category || '').toLowerCase() === 'fixedsubject'; }
+function isBatchSubjectSchedule(item) { return isFixedSchedule(item) && ['batchsubjectsection', 'batchsubjectteacher'].includes(String(item?.category || '').toLowerCase()); }
+function isFixedTeachingSchedule(item) { return isFixedSubjectSchedule(item) || isBatchSubjectSchedule(item); }
+function isNonTeachingFixedSchedule(item) { return isFixedSchedule(item) && !isFixedTeachingSchedule(item); }
+function isClassLikeSchedule(item) { return !isFixedSchedule(item) || isFixedTeachingSchedule(item); }
+function fixedDisplayTitle(item) { return item?.title || (item?.subjectId ? byName(schedulerData.subjects, item.subjectId) : 'Fixed Activity'); }
 function getDayTeachingStart(day, source = schedulerData) {
   const settings = normalizeSettings(source.settings || defaultData.settings);
   return settings.dayStarts?.[day] || settings.dayStart || defaultData.settings.dayStart;
@@ -168,12 +177,12 @@ function isValidTeachingSlot(day, start, duration = 50, source = schedulerData) 
   return generateSlots(day, source).includes(start) && toMinutes(start) + Number(duration || 0) <= toMinutes(getDayEnd(day, source));
 }
 function getTeacherStartTime(teacherId, source = schedulerData) { const teacher = (source.teachers || []).find(item => item.id === teacherId || item.name === teacherId); return teacher?.startTime || teacher?.officialStartTime || source.settings?.dayStart || defaultData.settings.dayStart; }
-function getTeacherStartConflict(schedule, source = schedulerData) { if (!schedule || isFixedSchedule(schedule) || !schedule.teacherId) return ''; const teacher = (source.teachers || []).find(item => item.id === schedule.teacherId || item.name === schedule.teacherId); if (!teacher) return ''; const officialStart = getTeacherStartTime(schedule.teacherId, source); if (toMinutes(schedule.start) < toMinutes(officialStart)) return `${teacher.name} officially starts at ${formatTime(officialStart)}, so they cannot be assigned to ${formatTime(schedule.start)}.`; return ''; }
+function getTeacherStartConflict(schedule, source = schedulerData) { if (!schedule || isNonTeachingFixedSchedule(schedule) || !schedule.teacherId) return ''; const teacher = (source.teachers || []).find(item => item.id === schedule.teacherId || item.name === schedule.teacherId); if (!teacher) return ''; const officialStart = getTeacherStartTime(schedule.teacherId, source); if (toMinutes(schedule.start) < toMinutes(officialStart)) return `${teacher.name} officially starts at ${formatTime(officialStart)}, so they cannot be assigned to ${formatTime(schedule.start)}.`; return ''; }
 function isLunchSchedule(item) { const label = `${item?.title || ''} ${item?.category || ''}`.toLowerCase(); return isFixedSchedule(item) && label.includes('lunch'); }
 function getLunchBlocks(source = schedulerData) { return expandFixedActivities(source).filter(isLunchSchedule); }
-function getTeacherLunchConflict(schedule, source = schedulerData) { if (!schedule || isFixedSchedule(schedule) || !schedule.teacherId) return ''; const teacher = (source.teachers || []).find(item => item.id === schedule.teacherId || item.name === schedule.teacherId); if (!teacher) return ''; const overlap = getLunchBlocks(source).find(lunch => lunch.day === schedule.day && overlaps(schedule.start, schedule.duration, lunch.start, lunch.duration)); if (!overlap) return ''; return `${teacher.name} must keep a lunch break around ${timeRange(overlap.start, overlap.duration)}. Assign this class outside the protected lunch slot.`; }
+function getTeacherLunchConflict(schedule, source = schedulerData) { if (!schedule || isNonTeachingFixedSchedule(schedule) || !schedule.teacherId) return ''; const teacher = (source.teachers || []).find(item => item.id === schedule.teacherId || item.name === schedule.teacherId); if (!teacher) return ''; const overlap = getLunchBlocks(source).find(lunch => lunch.day === schedule.day && overlaps(schedule.start, schedule.duration, lunch.start, lunch.duration)); if (!overlap) return ''; return `${teacher.name} must keep a lunch break around ${timeRange(overlap.start, overlap.duration)}. Assign this class outside the protected lunch slot.`; }
 function getDayWindowConflict(schedule, source = schedulerData) {
-  if (!schedule || isFixedSchedule(schedule) || !schedule.day) return '';
+  if (!schedule || isNonTeachingFixedSchedule(schedule) || !schedule.day) return '';
   const teachingStart = getDayTeachingStart(schedule.day, source);
   const dayEnd = getDayEnd(schedule.day, source);
   if (toMinutes(schedule.start) < toMinutes(teachingStart)) return `${schedule.day} teaching slots start at ${formatTime(teachingStart)}. Classes cannot be assigned to ${formatTime(schedule.start)} on this day.`;
@@ -185,46 +194,90 @@ function expandFixedActivities(source = schedulerData) {
   const activities = Array.isArray(source.fixedActivities) ? source.fixedActivities : [];
   return activities.flatMap(activity => {
     const sectionIds = Array.isArray(activity.sectionIds) ? activity.sectionIds : [];
+    const teacherIds = Array.isArray(activity.teacherIds) ? activity.teacherIds : [activity.teacherId].filter(Boolean);
     const days = Array.isArray(activity.days) && activity.days.length ? activity.days : (activity.day ? [activity.day] : []);
+    const duration = Number(activity.duration || schedulerData.settings?.slotDuration || 50);
+    const fixedSubject = isFixedSubjectActivity(activity);
+    const batchSubject = isBatchSubjectActivity(activity);
+    const subjectName = fixedSubject ? byName(schedulerData.subjects, activity.subjectId) : '';
+    if (batchSubject) {
+      const title = activity.title || 'Elective';
+      const sectionBlocks = sectionIds.flatMap(sectionId => days.map(day => ({
+        id: `fixed_${activity.id}_section_${sectionId}_${day}`,
+        fixedActivityId: activity.id,
+        type: 'fixed',
+        protected: true,
+        title,
+        category: 'batchSubjectSection',
+        sectionId,
+        subjectId: null,
+        teacherId: null,
+        roomId: DEFAULT_ROOM_ID,
+        roomMode: 'default',
+        day,
+        start: activity.start,
+        duration
+      })));
+      const teacherBlocks = teacherIds.flatMap(teacherId => days.map(day => ({
+        id: `fixed_${activity.id}_teacher_${teacherId}_${day}`,
+        fixedActivityId: activity.id,
+        type: 'fixed',
+        protected: true,
+        title,
+        category: 'batchSubjectTeacher',
+        sectionId: null,
+        subjectId: null,
+        teacherId,
+        roomId: DEFAULT_ROOM_ID,
+        roomMode: 'default',
+        day,
+        start: activity.start,
+        duration
+      })));
+      return [...sectionBlocks, ...teacherBlocks];
+    }
     return sectionIds.flatMap(sectionId => days.map(day => ({
       id: `fixed_${activity.id}_${sectionId}_${day}`,
       fixedActivityId: activity.id,
       type: 'fixed',
       protected: true,
-      title: activity.title || 'Fixed Activity',
+      title: activity.title || subjectName || 'Fixed Activity',
+      category: fixedSubject ? 'fixedSubject' : (activity.category || 'fixed'),
       sectionId,
-      subjectId: null,
-      teacherId: null,
-      roomId: DEFAULT_ROOM_ID,
-      roomMode: 'default',
+      subjectId: fixedSubject ? activity.subjectId : null,
+      teacherId: fixedSubject ? activity.teacherId : null,
+      roomId: fixedSubject ? (activity.roomId || DEFAULT_ROOM_ID) : DEFAULT_ROOM_ID,
+      roomMode: fixedSubject ? (activity.roomMode || (isDefaultRoom(activity.roomId) ? 'default' : 'manual')) : 'default',
       day,
       start: activity.start,
-      duration: Number(activity.duration || schedulerData.settings?.slotDuration || 50)
+      duration
     })));
   });
 }
 function allScheduleItems() { return [...expandFixedActivities(schedulerData), ...schedulerData.schedules]; }
-function conflictLabel(item) { return isFixedSchedule(item) ? `${item.title || 'Fixed Activity'} fixed block` : byName(schedulerData.subjects, item.subjectId); }
+function conflictLabel(item) { return isFixedTeachingSchedule(item) ? fixedDisplayTitle(item) : isFixedSchedule(item) ? `${item.title || 'Fixed Activity'} fixed block` : byName(schedulerData.subjects, item.subjectId); }
 function getParams() { const params = new URLSearchParams(window.location.search); return { kind: params.get('kind'), id: params.get('id'), browse: params.get('browse') }; }
 function getViewConfig(kind = currentKind) {
   return {
     section: {
       collectionName: 'sections', scheduleField: 'sectionId', legacyField: 'section', eyebrow: 'Section Weekly Calendar', subtitle: 'Monday to Friday section schedule view. Fixed activities are protected and cannot be moved.', printLabel: 'Print Section Schedule', emptyMessage: 'No weekly schedule has been created for this section yet.', missingMessage: 'Section not found. Open this view from the main scheduler again.',
       block(item) {
-        if (isFixedSchedule(item)) return [`<strong>${escapeHtml(item.title || 'Fixed Activity')}</strong>`, `<span class="class-time">${escapeHtml(timeRange(item.start, item.duration))}</span>`].join('');
-        return [`<strong>${escapeHtml(byName(schedulerData.subjects, item.subjectId))}</strong>`, `<span class="class-time">${escapeHtml(timeRange(item.start, item.duration))}</span>`, `<span>${escapeHtml(byName(schedulerData.teachers, item.teacherId))}</span>`, `<span>${escapeHtml(byName(schedulerData.rooms, item.roomId))}</span>`].join('');
+        if (isFixedSchedule(item) && !isFixedTeachingSchedule(item)) return [`<strong>${escapeHtml(item.title || 'Fixed Activity')}</strong>`, `<span class="class-time">${escapeHtml(timeRange(item.start, item.duration))}</span>`].join('');
+        if (isBatchSubjectSchedule(item)) return [`<strong>${escapeHtml(fixedDisplayTitle(item))}</strong>`, `<span class="class-time">${escapeHtml(timeRange(item.start, item.duration))}</span>`].join('');
+        const subjectTitle = isFixedSubjectSchedule(item) ? (item.title || byName(schedulerData.subjects, item.subjectId)) : byName(schedulerData.subjects, item.subjectId);
+        return [`<strong>${escapeHtml(subjectTitle)}</strong>`, `<span class="class-time">${escapeHtml(timeRange(item.start, item.duration))}</span>`, `<span>${escapeHtml(byName(schedulerData.teachers, item.teacherId))}${isFixedSubjectSchedule(item) ? ' · Fixed Subject' : ''}</span>`, `<span>${escapeHtml(byName(schedulerData.rooms, item.roomId))}</span>`].join('');
       }
     },
-    teacher: { collectionName: 'teachers', scheduleField: 'teacherId', legacyField: 'teacher', eyebrow: 'Teacher Weekly Calendar', subtitle: 'Monday to Friday teaching load view. Use this to check teacher assignments and print individual schedules.', printLabel: 'Print Teacher Schedule', emptyMessage: 'No weekly schedule has been created for this teacher yet.', missingMessage: 'Teacher not found. Open this view from the main scheduler again.', block(item) { return [`<strong>${escapeHtml(byName(schedulerData.sections, item.sectionId))}</strong>`, `<span class="class-time">${escapeHtml(timeRange(item.start, item.duration))}</span>`, `<span>${escapeHtml(byName(schedulerData.subjects, item.subjectId))}</span>`, `<span>${escapeHtml(byName(schedulerData.rooms, item.roomId))}</span>`].join(''); } },
-    room: { collectionName: 'rooms', scheduleField: 'roomId', legacyField: 'room', eyebrow: 'Room Weekly Calendar', subtitle: 'Monday to Friday laboratory/special room usage view. Print this schedule for room posting or room monitoring.', printLabel: 'Print Room Schedule', emptyMessage: 'No weekly schedule has been created for this room yet.', missingMessage: 'Room not found. Open this view from the main scheduler again.', block(item) { return [`<strong>${escapeHtml(byName(schedulerData.sections, item.sectionId))}</strong>`, `<span class="class-time">${escapeHtml(timeRange(item.start, item.duration))}</span>`, `<span>${escapeHtml(byName(schedulerData.subjects, item.subjectId))}</span>`, `<span>${escapeHtml(byName(schedulerData.teachers, item.teacherId))}</span>`].join(''); } }
+    teacher: { collectionName: 'teachers', scheduleField: 'teacherId', legacyField: 'teacher', eyebrow: 'Teacher Weekly Calendar', subtitle: 'Monday to Friday teaching load view. Use this to check teacher assignments and print individual schedules.', printLabel: 'Print Teacher Schedule', emptyMessage: 'No weekly schedule has been created for this teacher yet.', missingMessage: 'Teacher not found. Open this view from the main scheduler again.', block(item) { if (isBatchSubjectSchedule(item)) return [`<strong>${escapeHtml(fixedDisplayTitle(item))}</strong>`, `<span class="class-time">${escapeHtml(timeRange(item.start, item.duration))}</span>`].join(''); return [`<strong>${escapeHtml(byName(schedulerData.sections, item.sectionId))}</strong>`, `<span class="class-time">${escapeHtml(timeRange(item.start, item.duration))}</span>`, `<span>${escapeHtml(isFixedTeachingSchedule(item) ? fixedDisplayTitle(item) : byName(schedulerData.subjects, item.subjectId))}</span>`, `<span>${escapeHtml(byName(schedulerData.rooms, item.roomId))}</span>`].join(''); } },
+    room: { collectionName: 'rooms', scheduleField: 'roomId', legacyField: 'room', eyebrow: 'Room Weekly Calendar', subtitle: 'Monday to Friday laboratory/special room usage view. Print this schedule for room posting or room monitoring.', printLabel: 'Print Room Schedule', emptyMessage: 'No weekly schedule has been created for this room yet.', missingMessage: 'Room not found. Open this view from the main scheduler again.', block(item) { return [`<strong>${escapeHtml(byName(schedulerData.sections, item.sectionId))}</strong>`, `<span class="class-time">${escapeHtml(timeRange(item.start, item.duration))}</span>`, `<span>${escapeHtml(isFixedTeachingSchedule(item) ? fixedDisplayTitle(item) : byName(schedulerData.subjects, item.subjectId))}</span>`, `<span>${escapeHtml(byName(schedulerData.teachers, item.teacherId))}</span>`].join(''); } }
   }[kind] || null;
 }
 function getEntity(config, id) { const collection = schedulerData[config.collectionName] || []; return collection.find(item => item.id === id) || collection.find(item => item.name === id) || null; }
 function scheduleMatchesView(item) {
   const config = getViewConfig();
   if (!config || !item || !currentEntity) return false;
-  if (currentKind === 'room' && (isDefaultRoom(item.roomId) || isFixedSchedule(item))) return false;
-  if (currentKind === 'teacher' && isFixedSchedule(item)) return false;
+  if (currentKind === 'room' && (isDefaultRoom(item.roomId) || isNonTeachingFixedSchedule(item))) return false;
+  if (currentKind === 'teacher' && isNonTeachingFixedSchedule(item)) return false;
   return item[config.scheduleField] === currentId || item[config.scheduleField] === currentEntity.id || item[config.scheduleField] === currentEntity.name || item[config.legacyField] === currentEntity.name || item[config.legacyField] === currentEntity.id;
 }
 function filteredSchedules() { return allScheduleItems().filter(scheduleMatchesView).sort((a,b) => DAYS.indexOf(a.day)-DAYS.indexOf(b.day) || toMinutes(a.start)-toMinutes(b.start) || (isFixedSchedule(a) ? -1 : 1)); }
@@ -313,14 +366,15 @@ function getConflicts(newSchedule, ignoreId = null) {
   if (teacherStartConflict) conflicts.push(teacherStartConflict);
   const teacherLunchConflict = getTeacherLunchConflict(newSchedule);
   if (teacherLunchConflict) conflicts.push(teacherLunchConflict);
-  const newIsFixed = isFixedSchedule(newSchedule);
+  const newIsClassLike = isClassLikeSchedule(newSchedule);
   allScheduleItems().forEach(existing => {
     if (existing.id === ignoreId || existing.day !== newSchedule.day) return;
+    if (newSchedule.fixedActivityId && existing.fixedActivityId && newSchedule.fixedActivityId === existing.fixedActivityId) return;
     if (!overlaps(newSchedule.start, newSchedule.duration, existing.start, existing.duration)) return;
-    const existingIsFixed = isFixedSchedule(existing);
+    const existingIsClassLike = isClassLikeSchedule(existing);
     if (existing.sectionId && newSchedule.sectionId && existing.sectionId === newSchedule.sectionId) conflicts.push(`Section conflict with ${conflictLabel(existing)} at ${timeRange(existing.start, existing.duration)}.`);
-    if (!newIsFixed && !existingIsFixed && existing.teacherId === newSchedule.teacherId) conflicts.push(`Teacher conflict with ${byName(schedulerData.sections, existing.sectionId)} at ${timeRange(existing.start, existing.duration)}.`);
-    if (!newIsFixed && !existingIsFixed && !isDefaultRoom(newSchedule.roomId) && !isDefaultRoom(existing.roomId) && existing.roomId === newSchedule.roomId) conflicts.push(`Room conflict with ${byName(schedulerData.sections, existing.sectionId)} at ${timeRange(existing.start, existing.duration)}.`);
+    if (newIsClassLike && existingIsClassLike && existing.teacherId && newSchedule.teacherId && existing.teacherId === newSchedule.teacherId) conflicts.push(`Teacher conflict with ${existing.sectionId ? byName(schedulerData.sections, existing.sectionId) : conflictLabel(existing)} at ${timeRange(existing.start, existing.duration)}.`);
+    if (newIsClassLike && existingIsClassLike && !isDefaultRoom(newSchedule.roomId) && !isDefaultRoom(existing.roomId) && existing.roomId === newSchedule.roomId) conflicts.push(`Room conflict with ${byName(schedulerData.sections, existing.sectionId)} at ${timeRange(existing.start, existing.duration)}.`);
   });
   return conflicts;
 }
@@ -395,7 +449,8 @@ function icsEscape(value) {
   return String(value ?? '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
 }
 function eventSummary(item) {
-  if (isFixedSchedule(item)) return item.title || 'Fixed Activity';
+  if (isFixedSchedule(item) && !isFixedTeachingSchedule(item)) return item.title || 'Fixed Activity';
+  if (isFixedTeachingSchedule(item)) return fixedDisplayTitle(item);
   if (currentKind === 'teacher') return `${byName(schedulerData.sections, item.sectionId)} - ${byName(schedulerData.subjects, item.subjectId)}`;
   if (currentKind === 'room') return `${byName(schedulerData.sections, item.sectionId)} - ${byName(schedulerData.subjects, item.subjectId)}`;
   return byName(schedulerData.subjects, item.subjectId);
@@ -426,7 +481,7 @@ function buildCurrentIcs() {
     lines.push('RRULE:FREQ=WEEKLY;COUNT=40');
     lines.push(`SUMMARY:${icsEscape(eventSummary(item))}`);
     lines.push(`DESCRIPTION:${icsEscape(eventDescription(item))}`);
-    if (!isFixedSchedule(item) && !isDefaultRoom(item.roomId)) lines.push(`LOCATION:${icsEscape(byName(schedulerData.rooms, item.roomId))}`);
+    if (isClassLikeSchedule(item) && !isDefaultRoom(item.roomId)) lines.push(`LOCATION:${icsEscape(byName(schedulerData.rooms, item.roomId))}`);
     lines.push('END:VEVENT');
   });
   lines.push('END:VCALENDAR');
@@ -454,7 +509,7 @@ function exportCurrentIcs() {
   showStatus('iCal file exported. Import it into Google Calendar, iOS Calendar, or macOS Calendar.');
 }
 function renderHeader() { renderNavigator(); const config = getViewConfig(); if (!config || !currentEntity) { els.viewEyebrow.textContent = 'Weekly Calendar'; els.viewTitle.textContent = 'Schedule Not Found'; els.viewSubtitle.textContent = config?.missingMessage || 'Open this view from the main scheduler again.'; els.printBtn.textContent = 'Print Schedule'; return; } document.title = `${currentEntity.name} Weekly Schedule`; els.viewEyebrow.textContent = browserMode ? (browserMode === 'sections' ? 'Section Schedule Browser' : 'Teacher Schedule Browser') : config.eyebrow; els.viewTitle.textContent = currentEntity.name; els.viewSubtitle.textContent = browserMode ? 'Use the dropdown below to switch calendars quickly. This view remains printable and exportable.' : config.subtitle; els.printBtn.textContent = config.printLabel; }
-function renderSummary() { const schedules = filteredSchedules().filter(item => !isFixedSchedule(item)); els.totalClasses.textContent = schedules.length; els.totalMinutes.textContent = schedules.reduce((sum,item) => sum + Number(item.duration || 0), 0); els.dailySummary.innerHTML = DAYS.map(day => `<span><strong>${day.slice(0,3)}</strong> ${schedules.filter(item => item.day === day).length}</span>`).join(''); els.generatedAt.textContent = new Date().toLocaleString(); }
+function renderSummary() { const schedules = filteredSchedules().filter(isClassLikeSchedule); els.totalClasses.textContent = schedules.length; els.totalMinutes.textContent = schedules.reduce((sum,item) => sum + Number(item.duration || 0), 0); els.dailySummary.innerHTML = DAYS.map(day => `<span><strong>${day.slice(0,3)}</strong> ${schedules.filter(item => item.day === day).length}</span>`).join(''); els.generatedAt.textContent = new Date().toLocaleString(); }
 function renderCalendar() {
   const config = getViewConfig();
   renderHeader();
