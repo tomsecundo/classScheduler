@@ -1548,9 +1548,9 @@ function buildCsv(rows) {
 function downloadTeachingLoadTemplate() {
   const rows = [
     ['teacher', 'subject', 'sections', 'meetings', 'duration', 'roomMode', 'room', 'teacherStart'],
-    ['Santos', 'English 1', 'Grade 7 - Diamond; Grade 7 - Jade; Grade 7 - Ruby; Grade 7 - Sapphire', '4', '50', 'default', '', '07:30'],
-    ['Reyes', 'Computer Science', 'Grade 7 - Diamond; Grade 7 - Jade', '2', '100', 'manual', 'ICT Laboratory', '08:00'],
-    ['Cruz', 'Science', 'Grade 8 - Pearl', '3', '50', 'auto', '', '07:30']
+    ['Elegado', 'English 1', 'Grade 7 - Diamond; Grade 7 - Jade; Grade 7 - Emerald; Grade 7 - Sapphire', '4', '50', 'default', '', '07:30'],
+    ['Joaquin', 'Computer Science', 'Grade 7 - Diamond; Grade 7 - Jade', '2', '100', 'manual', 'ICT Laboratory', '08:00'],
+    ['Tenorio', 'Earth Science', 'Grade 8 - Rosal', '3', '50', 'auto', '', '07:30']
   ];
   downloadBlob(new Blob(['\uFEFF' + buildCsv(rows)], { type: 'text/csv;charset=utf-8' }), 'teaching-load-template.csv');
 }
