@@ -32,8 +32,8 @@ const els = {
   confirmModal: $('confirmModal'), confirmTitle: $('confirmTitle'), confirmMessage: $('confirmMessage'), confirmCloseBtn: $('confirmCloseBtn'), confirmCancelBtn: $('confirmCancelBtn'), confirmActionBtn: $('confirmActionBtn'),
   sectionForm: $('sectionForm'), subjectForm: $('subjectForm'), teacherForm: $('teacherForm'), teacherStartTime: $('teacherStartTime'), roomForm: $('roomForm'), settingsForm: $('settingsForm'), scheduleForm: $('scheduleForm'), teachingLoadForm: $('teachingLoadForm'), syncForm: $('syncForm'),
   scheduleSection: $('scheduleSection'), scheduleSubject: $('scheduleSubject'), scheduleTeacher: $('scheduleTeacher'), scheduleDay: $('scheduleDay'), scheduleStart: $('scheduleStart'), scheduleDuration: $('scheduleDuration'), roomMode: $('roomMode'), manualRoomWrap: $('manualRoomWrap'), manualRoom: $('manualRoom'),
-  loadSubject: $('loadSubject'), loadTeacher: $('loadTeacher'), loadMeetings: $('loadMeetings'), loadDuration: $('loadDuration'), loadRoomMode: $('loadRoomMode'), loadManualRoomWrap: $('loadManualRoomWrap'), loadManualRoom: $('loadManualRoom'), teachingLoadList: $('teachingLoadList'), replaceExistingSchedule: $('replaceExistingSchedule'), loadSectionChoices: $('loadSectionChoices'), loadSectionFilter: $('loadSectionFilter'), loadSelectAllSections: $('loadSelectAllSections'), loadClearSections: $('loadClearSections'), loadSelectMatchingSections: $('loadSelectMatchingSections'),
-  fixedActivityForm: $('fixedActivityForm'), fixedType: $('fixedType'), fixedTitle: $('fixedTitle'), fixedSubjectFields: $('fixedSubjectFields'), fixedBatchFields: $('fixedBatchFields'), fixedSubject: $('fixedSubject'), fixedTeacher: $('fixedTeacher'), fixedTeacherFilter: $('fixedTeacherFilter'), fixedTeacherChoices: $('fixedTeacherChoices'), fixedTeacherSelectMatching: $('fixedTeacherSelectMatching'), fixedTeacherSelectAll: $('fixedTeacherSelectAll'), fixedTeacherClear: $('fixedTeacherClear'), fixedRoomMode: $('fixedRoomMode'), fixedManualRoomWrap: $('fixedManualRoomWrap'), fixedManualRoom: $('fixedManualRoom'), fixedStart: $('fixedStart'), fixedDuration: $('fixedDuration'), fixedSectionFilter: $('fixedSectionFilter'), fixedSectionChoices: $('fixedSectionChoices'), fixedActivityList: $('fixedActivityList'), fixedLunchPreset: $('fixedLunchPreset'), fixedFlagCeremonyPreset: $('fixedFlagCeremonyPreset'), fixedFlagRetreatPreset: $('fixedFlagRetreatPreset'), fixedSelectAllSections: $('fixedSelectAllSections'), fixedClearSections: $('fixedClearSections'), fixedSelectMatchingSections: $('fixedSelectMatchingSections'),
+  loadSubject: $('loadSubject'), loadTeacher: $('loadTeacher'), loadMeetings: $('loadMeetings'), loadDuration: $('loadDuration'), loadRoomMode: $('loadRoomMode'), loadManualRoomWrap: $('loadManualRoomWrap'), loadManualRoom: $('loadManualRoom'), teachingLoadList: $('teachingLoadList'), replaceExistingSchedule: $('replaceExistingSchedule'), loadSectionChoices: $('loadSectionChoices'), loadSectionFilter: $('loadSectionFilter'), loadSelectAllSections: $('loadSelectAllSections'), loadClearSections: $('loadClearSections'), loadSelectMatchingSections: $('loadSelectMatchingSections'), loadCsvFile: $('loadCsvFile'), loadCsvImportBtn: $('loadCsvImportBtn'), loadCsvTemplateBtn: $('loadCsvTemplateBtn'), loadCsvCreateMissing: $('loadCsvCreateMissing'),
+  fixedActivityForm: $('fixedActivityForm'), fixedType: $('fixedType'), fixedTitle: $('fixedTitle'), fixedSubjectFields: $('fixedSubjectFields'), fixedBatchFields: $('fixedBatchFields'), fixedSubject: $('fixedSubject'), fixedTeacher: $('fixedTeacher'), fixedTeacherFilter: $('fixedTeacherFilter'), fixedTeacherChoices: $('fixedTeacherChoices'), fixedTeacherSelectMatching: $('fixedTeacherSelectMatching'), fixedTeacherSelectAll: $('fixedTeacherSelectAll'), fixedTeacherClear: $('fixedTeacherClear'), fixedOfferingList: $('fixedOfferingList'), fixedAddOffering: $('fixedAddOffering'), fixedRoomMode: $('fixedRoomMode'), fixedManualRoomWrap: $('fixedManualRoomWrap'), fixedManualRoom: $('fixedManualRoom'), fixedStart: $('fixedStart'), fixedDuration: $('fixedDuration'), fixedSectionFilter: $('fixedSectionFilter'), fixedSectionChoices: $('fixedSectionChoices'), fixedActivityList: $('fixedActivityList'), fixedLunchPreset: $('fixedLunchPreset'), fixedFlagCeremonyPreset: $('fixedFlagCeremonyPreset'), fixedFlagRetreatPreset: $('fixedFlagRetreatPreset'), fixedSelectAllSections: $('fixedSelectAllSections'), fixedClearSections: $('fixedClearSections'), fixedSelectMatchingSections: $('fixedSelectMatchingSections'),
   sectionList: $('sectionList'), subjectList: $('subjectList'), teacherList: $('teacherList'), roomList: $('roomList'), scheduleTable: $('scheduleTable'), filterSection: $('filterSection'), filterDay: $('filterDay'), showFixedSchedules: $('showFixedSchedules'),
   dayStart: $('dayStart'), dayEnd: $('dayEnd'), slotDuration: $('slotDuration'), dayStartMonday: $('dayStartMonday'), dayStartTuesday: $('dayStartTuesday'), dayStartWednesday: $('dayStartWednesday'), dayStartThursday: $('dayStartThursday'), dayStartFriday: $('dayStartFriday'), mondayFlagPatternBtn: $('mondayFlagPatternBtn'), importFile: $('importFile'), exportBtn: $('exportBtn'), printBtn: $('printBtn'), exportSpreadsheetBtn: $('exportSpreadsheetBtn'), exportSpreadsheetSideBtn: $('exportSpreadsheetSideBtn'), browseSectionsBtn: $('browseSectionsBtn'), browseTeachersBtn: $('browseTeachersBtn'), clearScheduleForm: $('clearScheduleForm'), autoGenerateBtn: $('autoGenerateBtn'), masterResetScheduleBtn: $('masterResetScheduleBtn'),
   syncEnabled: $('syncEnabled'), apiBaseUrl: $('apiBaseUrl'), syncStatus: $('syncStatus'), syncPullBtn: $('syncPullBtn'), syncPushBtn: $('syncPushBtn'), serverRevision: $('serverRevision'),
@@ -224,9 +224,28 @@ function loadRoomLabel(load) {
 }
 function isFixedSubjectActivity(activity) { return String(activity?.category || '').toLowerCase() === 'fixedsubject'; }
 function isBatchSubjectActivity(activity) { return ['batchsubject', 'batchfixedsubject', 'batch'].includes(String(activity?.category || '').toLowerCase()); }
+function normalizeBatchOffering(activity, offering = {}, index = 0) {
+  const teacherId = offering.teacherId || offering.teacher || '';
+  const roomMode = offering.roomMode || (isDefaultRoom(offering.roomId) ? 'default' : 'manual');
+  const roomId = roomMode === 'manual' ? (offering.roomId || '') : DEFAULT_ROOM_ID;
+  return {
+    id: offering.id || `offering_${teacherId || index}_${index}`,
+    title: String(offering.title || offering.name || activity?.title || 'Elective').trim(),
+    teacherId,
+    roomMode,
+    roomId
+  };
+}
+function getBatchOfferings(activity) {
+  const rawOfferings = Array.isArray(activity?.offerings) ? activity.offerings : [];
+  const clean = rawOfferings.map((offering, index) => normalizeBatchOffering(activity, offering, index)).filter(offering => offering.teacherId);
+  if (clean.length) return clean;
+  const legacyTeacherIds = Array.isArray(activity?.teacherIds) ? activity.teacherIds : [activity?.teacherId].filter(Boolean);
+  return legacyTeacherIds.map((teacherId, index) => normalizeBatchOffering(activity, { teacherId, title: activity?.title || 'Elective', roomMode: 'default', roomId: DEFAULT_ROOM_ID }, index));
+}
 function isFixedTeachingActivity(activity) { return isFixedSubjectActivity(activity) || isBatchSubjectActivity(activity); }
 function isFixedSubjectSchedule(item) { return isFixedSchedule(item) && String(item?.category || '').toLowerCase() === 'fixedsubject'; }
-function isBatchSubjectSchedule(item) { return isFixedSchedule(item) && ['batchsubjectsection', 'batchsubjectteacher'].includes(String(item?.category || '').toLowerCase()); }
+function isBatchSubjectSchedule(item) { return isFixedSchedule(item) && ['batchsubjectsection', 'batchsubjectteacher', 'batchsubjectoffering'].includes(String(item?.category || '').toLowerCase()); }
 function isFixedTeachingSchedule(item) { return isFixedSubjectSchedule(item) || isBatchSubjectSchedule(item); }
 function isNonTeachingFixedSchedule(item) { return isFixedSchedule(item) && !isFixedTeachingSchedule(item); }
 function isClassLikeSchedule(item) { return !isFixedSchedule(item) || isFixedTeachingSchedule(item); }
@@ -482,6 +501,7 @@ function resetFixedActivityFormMode(options = {}) {
   if (els.fixedSubjectFields) els.fixedSubjectFields.classList.add('hidden');
   if (els.fixedBatchFields) els.fixedBatchFields.classList.add('hidden');
   setAllFixedTeachers(false);
+  setFixedOfferings([]);
   if (els.fixedRoomMode) els.fixedRoomMode.value = 'default';
   if (els.fixedManualRoomWrap) els.fixedManualRoomWrap.classList.add('hidden');
   setFixedDays([]);
@@ -510,6 +530,7 @@ function setFixedActivityEditMode(id) {
   setAllFixedSections(false);
   document.querySelectorAll('.fixed-section-checkbox').forEach(input => { input.checked = (activity.sectionIds || []).includes(input.value); });
   setAllFixedTeachers(false);
+  setFixedOfferings(isBatchSubjectActivity(activity) ? getBatchOfferings(activity) : []);
   setFixedTeachers(activity.teacherIds || [activity.teacherId].filter(Boolean));
   setButtonText('fixedSubmitBtn', 'Save Fixed Activity');
   setHidden('fixedCancelEdit', false);
@@ -765,6 +786,7 @@ function renderSelects() {
   renderOptions(els.fixedTeacher, data.teachers, 'Choose teacher', item => `${item.name} · ${teacherStartLabel(item)}`);
   renderOptions(els.fixedManualRoom, data.rooms, 'Choose assigned room/lab', item => item.capacity ? `${item.name} (${item.capacity})` : item.name);
   renderFixedTeacherChoices();
+  refreshFixedOfferingRows();
 }
 function renderSettings() {
   data.settings = normalizeSettings(data.settings);
@@ -794,6 +816,7 @@ function expandFixedActivities(source = data) {
   return activities.flatMap(activity => {
     const sectionIds = Array.isArray(activity.sectionIds) ? activity.sectionIds : [];
     const teacherIds = Array.isArray(activity.teacherIds) ? activity.teacherIds : [activity.teacherId].filter(Boolean);
+    const offerings = getBatchOfferings(activity);
     const days = Array.isArray(activity.days) && activity.days.length ? activity.days : (activity.day ? [activity.day] : []);
     const duration = Number(activity.duration || data.settings.slotDuration || 50);
     const fixedSubject = isFixedSubjectActivity(activity);
@@ -817,18 +840,20 @@ function expandFixedActivities(source = data) {
         start: activity.start,
         duration
       })));
-      const teacherBlocks = teacherIds.flatMap(teacherId => days.map(day => ({
-        id: `fixed_${activity.id}_teacher_${teacherId}_${day}`,
+      const teacherBlocks = offerings.flatMap(offering => days.map(day => ({
+        id: `fixed_${activity.id}_offering_${offering.id}_${day}`,
         fixedActivityId: activity.id,
+        offeringId: offering.id,
         type: 'fixed',
         protected: true,
-        title,
+        title: offering.title || title,
+        displayTitle: title,
         category: 'batchSubjectTeacher',
         sectionId: null,
         subjectId: null,
-        teacherId,
-        roomId: DEFAULT_ROOM_ID,
-        roomMode: 'default',
+        teacherId: offering.teacherId,
+        roomId: offering.roomMode === 'manual' ? offering.roomId : DEFAULT_ROOM_ID,
+        roomMode: offering.roomMode || 'default',
         day,
         start: activity.start,
         duration
@@ -869,6 +894,69 @@ function renderFixedSectionChoices() {
       <span>${escapeHtml(section.name)}</span>
     </label>`).join('');
 }
+function teacherOptionsHtml(selectedId = '') {
+  return '<option value="">Choose teacher</option>' + sortByName(data.teachers).map(teacher => `<option value="${escapeHtml(teacher.id)}" ${teacher.id === selectedId ? 'selected' : ''}>${escapeHtml(teacher.name)} · ${escapeHtml(teacherStartLabel(teacher))}</option>`).join('');
+}
+function roomOptionsHtml(selectedId = '') {
+  return '<option value="">Choose room/lab</option>' + sortByName(data.rooms).map(room => `<option value="${escapeHtml(room.id)}" ${room.id === selectedId ? 'selected' : ''}>${escapeHtml(room.capacity ? `${room.name} (${room.capacity})` : room.name)}</option>`).join('');
+}
+function offeringRoomModeOptions(selected = 'default') {
+  return `<option value="default" ${selected === 'default' ? 'selected' : ''}>Default / no room</option><option value="manual" ${selected === 'manual' ? 'selected' : ''}>Manual room/lab</option>`;
+}
+function addFixedOfferingRow(offering = {}) {
+  if (!els.fixedOfferingList) return;
+  if (els.fixedOfferingList.querySelector('.batch-offering-empty')) els.fixedOfferingList.innerHTML = '';
+  const normalized = normalizeBatchOffering({ title: els.fixedTitle?.value || 'Elective' }, offering, document.querySelectorAll('.batch-offering-row').length);
+  const rowId = normalized.id || createId('offering');
+  const manual = normalized.roomMode === 'manual';
+  els.fixedOfferingList.insertAdjacentHTML('beforeend', `
+    <div class="batch-offering-row" data-offering-id="${escapeHtml(rowId)}">
+      <label>Teacher
+        <select class="fixed-offering-teacher" required>${teacherOptionsHtml(normalized.teacherId)}</select>
+      </label>
+      <label>Specific Title for Teacher/Room View
+        <input type="text" class="fixed-offering-title" value="${escapeHtml(normalized.title)}" placeholder="e.g., Drone Technology Elective" required />
+      </label>
+      <label>Room Assignment
+        <select class="fixed-offering-room-mode">${offeringRoomModeOptions(normalized.roomMode || 'default')}</select>
+      </label>
+      <label class="fixed-offering-room-wrap ${manual ? '' : 'hidden'}">Room/Lab
+        <select class="fixed-offering-room">${roomOptionsHtml(normalized.roomId)}</select>
+      </label>
+      <button type="button" class="icon-btn compact-btn remove-offering-btn" aria-label="Remove offering">Delete</button>
+    </div>`);
+}
+function getFixedOfferingsFromForm() {
+  return [...document.querySelectorAll('.batch-offering-row')].map((row, index) => {
+    const roomMode = row.querySelector('.fixed-offering-room-mode')?.value || 'default';
+    return normalizeBatchOffering({ title: els.fixedTitle?.value || 'Elective' }, {
+      id: row.dataset.offeringId || `offering_form_${index}`,
+      teacherId: row.querySelector('.fixed-offering-teacher')?.value || '',
+      title: row.querySelector('.fixed-offering-title')?.value || '',
+      roomMode,
+      roomId: roomMode === 'manual' ? row.querySelector('.fixed-offering-room')?.value || '' : DEFAULT_ROOM_ID
+    }, index);
+  }).filter(offering => offering.teacherId || offering.title || !isDefaultRoom(offering.roomId));
+}
+function setFixedOfferings(offerings = []) {
+  if (!els.fixedOfferingList) return;
+  els.fixedOfferingList.innerHTML = '';
+  const list = (offerings || []).length ? offerings : [];
+  if (!list.length) {
+    els.fixedOfferingList.innerHTML = '<div class="batch-offering-empty">No specific offerings yet. Click Add Offering to assign each elective/research teacher, title, and room.</div>';
+    return;
+  }
+  list.forEach(offering => addFixedOfferingRow(offering));
+}
+function refreshFixedOfferingRows() {
+  if (!els.fixedOfferingList || els.fixedType?.value !== 'batch') return;
+  const current = getFixedOfferingsFromForm();
+  if (current.length) setFixedOfferings(current);
+}
+function toggleOfferingRoom(row) {
+  const mode = row.querySelector('.fixed-offering-room-mode')?.value || 'default';
+  row.querySelector('.fixed-offering-room-wrap')?.classList.toggle('hidden', mode !== 'manual');
+}
 function renderFixedTeacherChoices() {
   if (!els.fixedTeacherChoices) return;
   const selected = new Set([...els.fixedTeacherChoices.querySelectorAll('input:checked')].map(input => input.value));
@@ -882,7 +970,7 @@ function renderFixedTeacherChoices() {
       <span>${escapeHtml(teacher.name)} · ${escapeHtml(teacherStartLabel(teacher))}</span>
     </label>`).join('');
 }
-function getSelectedFixedTeachers() { return [...document.querySelectorAll('.fixed-teacher-checkbox:checked')].map(input => input.value); }
+function getSelectedFixedTeachers() { const offeringTeachers = getFixedOfferingsFromForm().map(offering => offering.teacherId).filter(Boolean); if (offeringTeachers.length) return offeringTeachers; return [...document.querySelectorAll('.fixed-teacher-checkbox:checked')].map(input => input.value); }
 function setFixedTeachers(teacherIds) {
   const selected = new Set(teacherIds || []);
   document.querySelectorAll('.fixed-teacher-checkbox').forEach(input => { input.checked = selected.has(input.value); });
@@ -914,9 +1002,10 @@ function renderFixedActivityList() {
     const fixedSubject = isFixedSubjectActivity(activity);
     const batchSubject = isBatchSubjectActivity(activity);
     const title = fixedSubject ? (activity.title || byName(data.subjects, activity.subjectId)) : (activity.title || 'Fixed Activity');
-    const teacherPreview = (activity.teacherIds || [activity.teacherId].filter(Boolean)).map(id => byName(data.teachers, id)).slice(0, 3).join(', ');
+    const offerings = batchSubject ? getBatchOfferings(activity) : [];
+    const teacherPreview = offerings.length ? offerings.map(offering => `${offering.title} — ${byName(data.teachers, offering.teacherId)}${isDefaultRoom(offering.roomId) ? '' : ` @ ${roomName(offering.roomId)}`}`).slice(0, 3).join('; ') : (activity.teacherIds || [activity.teacherId].filter(Boolean)).map(id => byName(data.teachers, id)).slice(0, 3).join(', ');
     const meta = batchSubject
-      ? `${days.join(', ')} · ${timeRange(activity.start, activity.duration)} · ${(activity.teacherIds || []).length} teacher(s) · ${sectionPreview || 'No sections'}`
+      ? `${days.join(', ')} · ${timeRange(activity.start, activity.duration)} · ${offerings.length || (activity.teacherIds || []).length} offering(s) · ${sectionPreview || 'No sections'}${teacherPreview ? ` · ${teacherPreview}${offerings.length > 3 ? ` +${offerings.length - 3} more` : ''}` : ''}`
       : fixedSubject
         ? `${days.join(', ')} · ${timeRange(activity.start, activity.duration)} · ${byName(data.teachers, activity.teacherId)} · ${roomName(activity.roomId)} · ${sectionPreview || 'No sections'}`
         : `${days.join(', ')} · ${timeRange(activity.start, activity.duration)} · ${sectionPreview || 'No sections'}`;
@@ -969,6 +1058,7 @@ function toggleFixedSubjectFields() {
   if (els.fixedBatchFields) els.fixedBatchFields.classList.toggle('hidden', !isBatch);
   if (els.fixedManualRoomWrap) els.fixedManualRoomWrap.classList.toggle('hidden', !isSubject || els.fixedRoomMode?.value !== 'manual');
   if (isBatch && els.fixedTitle && !els.fixedTitle.value.trim()) els.fixedTitle.value = 'Elective';
+  if (isBatch && els.fixedOfferingList && !els.fixedOfferingList.querySelector('.batch-offering-row')) setFixedOfferings([]);
 }
 function syncFixedSubjectDefaults() {
   if (els.fixedType?.value !== 'subject') return;
@@ -999,7 +1089,8 @@ function addFixedActivity() {
   const batchSubject = mode === 'batch';
   const subjectId = fixedSubject ? els.fixedSubject?.value : null;
   const teacherId = fixedSubject ? els.fixedTeacher?.value : null;
-  const teacherIds = batchSubject ? getSelectedFixedTeachers() : [];
+  const offerings = batchSubject ? getFixedOfferingsFromForm().filter(offering => offering.teacherId || offering.title || !isDefaultRoom(offering.roomId)) : [];
+  const teacherIds = batchSubject ? offerings.map(offering => offering.teacherId).filter(Boolean) : [];
   const roomMode = fixedSubject ? (els.fixedRoomMode?.value || 'default') : 'default';
   const roomId = fixedSubject && roomMode === 'manual' ? els.fixedManualRoom?.value : DEFAULT_ROOM_ID;
   const subjectTitle = fixedSubject ? byName(data.subjects, subjectId) : '';
@@ -1012,7 +1103,11 @@ function addFixedActivity() {
   if (fixedSubject && !subjectId) return showAlert('Choose the fixed subject.', 'warning');
   if (fixedSubject && !teacherId) return showAlert('Choose the teacher for this fixed subject.', 'warning');
   if (fixedSubject && roomMode === 'manual' && !roomId) return showAlert('Choose the assigned room/lab for this fixed subject.', 'warning');
-  if (batchSubject && !teacherIds.length) return showAlert('Select at least one teacher assigned during this batch-wide block.', 'warning');
+  if (batchSubject && !offerings.length) return showAlert('Add at least one specific offering for this batch-wide block.', 'warning');
+  if (batchSubject && offerings.some(offering => !offering.teacherId)) return showAlert('Choose a teacher for every elective/research offering.', 'warning');
+  if (batchSubject && offerings.some(offering => !offering.title.trim())) return showAlert('Enter a specific title for every elective/research offering.', 'warning');
+  if (batchSubject && offerings.some(offering => offering.roomMode === 'manual' && !offering.roomId)) return showAlert('Choose the assigned room/lab for every offering set to Manual room/lab.', 'warning');
+  if (batchSubject && new Set(teacherIds).size !== teacherIds.length) return showAlert('Each elective/research offering must have a different teacher. Duplicate teacher assignments in the same fixed block are not allowed.', 'warning');
   if (!days.length) return showAlert('Choose at least one day for the fixed slot.', 'warning');
   if (!sectionIds.length) return showAlert('Choose at least one section for the fixed slot.', 'warning');
   if (toMinutes(start) + duration > toMinutes(data.settings.dayEnd)) return showAlert('This fixed slot goes beyond the school day end time.', 'error');
@@ -1028,6 +1123,7 @@ function addFixedActivity() {
     subjectId,
     teacherId,
     teacherIds,
+    offerings: batchSubject ? offerings.map((offering, index) => ({ ...offering, id: offering.id || createId('offering') || `offering_${index}` })) : [],
     roomMode,
     roomId
   };
@@ -1036,9 +1132,11 @@ function addFixedActivity() {
     ...expandFixedActivities({ fixedActivities: data.fixedActivities.filter(item => item.id !== editingId) }),
     ...data.schedules
   ];
+  const checkedCandidates = [];
   for (const candidate of candidates) {
-    const conflicts = getConflictsInList(candidate, existing);
+    const conflicts = getConflictsInList(candidate, [...existing, ...checkedCandidates]);
     if (conflicts.length) return showAlert(`Cannot ${editingId ? 'update' : 'add'} ${title}. ${conflicts[0]}`, 'error');
+    checkedCandidates.push(candidate);
   }
   if (editingId) {
     const index = data.fixedActivities.findIndex(item => item.id === editingId);
@@ -1113,7 +1211,10 @@ function getConflictsInList(newSchedule, schedules, ignoreId = null) {
   const newIsClassLike = isClassLikeSchedule(newSchedule);
   schedules.forEach(existing => {
     if (existing.id === ignoreId || existing.day !== newSchedule.day) return;
-    if (newSchedule.fixedActivityId && existing.fixedActivityId && newSchedule.fixedActivityId === existing.fixedActivityId) return;
+    if (newSchedule.fixedActivityId && existing.fixedActivityId && newSchedule.fixedActivityId === existing.fixedActivityId) {
+      if (isFixedSubjectSchedule(newSchedule) && isFixedSubjectSchedule(existing)) return;
+      if (isBatchSubjectSchedule(newSchedule) && isBatchSubjectSchedule(existing) && (newSchedule.category === 'batchSubjectSection' || existing.category === 'batchSubjectSection')) return;
+    }
     if (!overlaps(newSchedule.start, newSchedule.duration, existing.start, existing.duration)) return;
     const existingIsClassLike = isClassLikeSchedule(existing);
     if (existing.sectionId && newSchedule.sectionId && existing.sectionId === newSchedule.sectionId) {
@@ -1123,7 +1224,7 @@ function getConflictsInList(newSchedule, schedules, ignoreId = null) {
       conflicts.push(`Teacher conflict with ${existing.sectionId ? byName(data.sections, existing.sectionId) : conflictLabel(existing)} at ${timeRange(existing.start, existing.duration)}.`);
     }
     if (newIsClassLike && existingIsClassLike && !isDefaultRoom(newSchedule.roomId) && !isDefaultRoom(existing.roomId) && existing.roomId === newSchedule.roomId) {
-      conflicts.push(`Room conflict with ${byName(data.sections, existing.sectionId)} at ${timeRange(existing.start, existing.duration)}.`);
+      conflicts.push(`Room conflict with ${existing.sectionId ? byName(data.sections, existing.sectionId) : conflictLabel(existing)} at ${timeRange(existing.start, existing.duration)}.`);
     }
   });
   return conflicts;
@@ -1156,7 +1257,7 @@ function addSimpleItem(collectionName, item) {
 function deleteItem(collectionName, id) {
   const usedInSchedules = data.schedules.some(schedule => [schedule.sectionId, schedule.subjectId, schedule.teacherId].includes(id) || (!isDefaultRoom(schedule.roomId) && schedule.roomId === id));
   const usedInLoads = data.teachingLoads.some(load => [load.sectionId, load.subjectId, load.teacherId].includes(id) || (!isDefaultRoom(load.roomId) && load.roomId === id));
-  const usedInFixed = data.fixedActivities.some(activity => (Array.isArray(activity.sectionIds) && activity.sectionIds.includes(id)) || [activity.subjectId, activity.teacherId, activity.roomId].includes(id) || (activity.teacherIds || []).includes(id));
+  const usedInFixed = data.fixedActivities.some(activity => (Array.isArray(activity.sectionIds) && activity.sectionIds.includes(id)) || [activity.subjectId, activity.teacherId, activity.roomId].includes(id) || (activity.teacherIds || []).includes(id) || (activity.offerings || []).some(offering => [offering.teacherId, offering.roomId].includes(id)));
   if (usedInSchedules || usedInLoads || usedInFixed) return showAlert('Cannot delete this item because it is used in a schedule, teaching load, or fixed activity. Delete those entries first.', 'error');
   data[collectionName] = data[collectionName].filter(item => item.id !== id); saveData(); renderAll(); showAlert('Item deleted.');
 }
@@ -1383,6 +1484,193 @@ function exportWeeklySpreadsheet() {
   const date = new Date().toISOString().slice(0,10);
   downloadBlob(createXlsxBlob(rows), `all-section-weekly-schedules-${date}.xlsx`);
   showAlert('Weekly spreadsheet exported.');
+}
+
+
+function normalizeCsvLookup(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+function findByNameInsensitive(list, name) {
+  const key = normalizeCsvLookup(name);
+  return (list || []).find(item => normalizeCsvLookup(item.name) === key) || null;
+}
+function parseCsvText(text) {
+  const rows = [];
+  let row = [];
+  let cell = '';
+  let inQuotes = false;
+  const input = String(text || '').replace(/^\uFEFF/, '');
+  for (let i = 0; i < input.length; i++) {
+    const char = input[i];
+    const next = input[i + 1];
+    if (char === '"') {
+      if (inQuotes && next === '"') { cell += '"'; i++; }
+      else inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      row.push(cell.trim()); cell = '';
+    } else if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (char === '\r' && next === '\n') i++;
+      row.push(cell.trim()); cell = '';
+      if (row.some(value => String(value).trim() !== '')) rows.push(row);
+      row = [];
+    } else {
+      cell += char;
+    }
+  }
+  row.push(cell.trim());
+  if (row.some(value => String(value).trim() !== '')) rows.push(row);
+  return rows;
+}
+function normalizeCsvHeader(header) {
+  return String(header || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+function getCsvValue(rowObject, candidates) {
+  for (const candidate of candidates) {
+    const key = normalizeCsvHeader(candidate);
+    if (Object.prototype.hasOwnProperty.call(rowObject, key)) return rowObject[key];
+  }
+  return '';
+}
+function splitCsvSections(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return [];
+  let parts = raw.split(/[;|\n]+/).map(item => item.trim()).filter(Boolean);
+  if (parts.length <= 1 && raw.includes(',')) parts = raw.split(',').map(item => item.trim()).filter(Boolean);
+  return [...new Set(parts)];
+}
+function csvEscape(value) {
+  const text = String(value ?? '');
+  return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+function buildCsv(rows) {
+  return rows.map(row => row.map(csvEscape).join(',')).join('\n');
+}
+function downloadTeachingLoadTemplate() {
+  const rows = [
+    ['teacher', 'subject', 'sections', 'meetings', 'duration', 'roomMode', 'room', 'teacherStart'],
+    ['Santos', 'English 1', 'Grade 7 - Diamond; Grade 7 - Jade; Grade 7 - Ruby; Grade 7 - Sapphire', '4', '50', 'default', '', '07:30'],
+    ['Reyes', 'Computer Science', 'Grade 7 - Diamond; Grade 7 - Jade', '2', '100', 'manual', 'ICT Laboratory', '08:00'],
+    ['Cruz', 'Science', 'Grade 8 - Pearl', '3', '50', 'auto', '', '07:30']
+  ];
+  downloadBlob(new Blob(['\uFEFF' + buildCsv(rows)], { type: 'text/csv;charset=utf-8' }), 'teaching-load-template.csv');
+}
+function parseRoomModeValue(modeValue, roomName) {
+  const mode = normalizeCsvLookup(modeValue).replace(/\s+/g, '');
+  const room = String(roomName || '').trim();
+  if (['auto', 'autolab', 'autoroom', 'autolaborroom', 'labauto'].includes(mode)) return 'auto';
+  if (['manual', 'manualroom', 'manuallab', 'lab', 'room'].includes(mode)) return 'manual';
+  if (['default', 'defaultclassroom', 'classroom', 'none', 'no'].includes(mode)) return 'default';
+  if (room && normalizeCsvLookup(room) !== normalizeCsvLookup(DEFAULT_ROOM_NAME)) return 'manual';
+  return 'default';
+}
+function resolveCsvNamedItem(collectionName, name, options = {}) {
+  const list = data[collectionName] || [];
+  const label = options.label || collectionName;
+  const cleanName = String(name || '').trim();
+  if (!cleanName) return { error: `Missing ${label}.` };
+  const existing = findByNameInsensitive(list, cleanName);
+  if (existing) return { item: existing, created: false };
+  if (!options.createMissing) return { error: `${label} not found: ${cleanName}` };
+  const item = { id: createId(options.prefix || label), name: cleanName };
+  if (collectionName === 'teachers') item.startTime = options.startTime || data.settings.dayStart || defaultData.settings.dayStart;
+  if (collectionName === 'subjects') item.duration = Number(options.duration || 50);
+  if (collectionName === 'sections') item.size = 0;
+  if (collectionName === 'rooms') item.capacity = 0;
+  data[collectionName].push(item);
+  return { item, created: true };
+}
+function readFileAsText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('Unable to read CSV file.'));
+    reader.readAsText(file);
+  });
+}
+async function importTeachingLoadsFromCsv() {
+  const file = els.loadCsvFile?.files?.[0];
+  if (!file) return showAlert('Choose a CSV file to import.', 'warning');
+  let rows;
+  try {
+    rows = parseCsvText(await readFileAsText(file));
+  } catch (error) {
+    return showAlert(`Could not read the CSV file. ${error.message || ''}`, 'error');
+  }
+  if (!rows.length || rows.length < 2) return showAlert('CSV file is empty. Use the template format and try again.', 'warning');
+  const headers = rows[0].map(normalizeCsvHeader);
+  const records = rows.slice(1).map(row => headers.reduce((object, key, index) => ({ ...object, [key]: row[index] || '' }), {}));
+  const createMissing = Boolean(els.loadCsvCreateMissing?.checked);
+  const errors = [];
+  const created = { teachers: 0, subjects: 0, sections: 0, rooms: 0 };
+  let added = 0, updated = 0, skipped = 0;
+
+  records.forEach((record, index) => {
+    const rowNo = index + 2;
+    const teacherName = getCsvValue(record, ['teacher', 'teacherName']);
+    const subjectName = getCsvValue(record, ['subject', 'subjectName']);
+    const sectionNames = splitCsvSections(getCsvValue(record, ['sections', 'section', 'sectionNames', 'sectionName']));
+    const meetings = Number(getCsvValue(record, ['meetings', 'meetingsPerWeek', 'meetingsWeek', 'perWeek']) || 1);
+    const duration = Number(getCsvValue(record, ['duration', 'durationMinutes', 'minutes']) || 50);
+    const roomName = getCsvValue(record, ['room', 'roomName', 'manualRoom', 'lab', 'laboratory']);
+    const roomMode = parseRoomModeValue(getCsvValue(record, ['roomMode', 'roomAssignment', 'roomType']), roomName);
+    const teacherStart = getCsvValue(record, ['teacherStart', 'teacherStartTime', 'officialStart', 'officialStartTime']) || data.settings.dayStart || defaultData.settings.dayStart;
+
+    if (!teacherName && !subjectName && !sectionNames.length) { skipped++; return; }
+    if (!Number.isFinite(meetings) || meetings < 1) { errors.push(`Row ${rowNo}: meetings must be at least 1.`); return; }
+    if (!Number.isFinite(duration) || duration < 10) { errors.push(`Row ${rowNo}: duration must be at least 10 minutes.`); return; }
+    if (!sectionNames.length) { errors.push(`Row ${rowNo}: add at least one section.`); return; }
+
+    const teacherResult = resolveCsvNamedItem('teachers', teacherName, { label: 'teacher', prefix: 'teacher', createMissing, startTime: teacherStart });
+    if (teacherResult.error) { errors.push(`Row ${rowNo}: ${teacherResult.error}`); return; }
+    if (teacherResult.created) created.teachers++;
+
+    const subjectResult = resolveCsvNamedItem('subjects', subjectName, { label: 'subject', prefix: 'subject', createMissing, duration });
+    if (subjectResult.error) { errors.push(`Row ${rowNo}: ${subjectResult.error}`); return; }
+    if (subjectResult.created) created.subjects++;
+
+    let roomId = DEFAULT_ROOM_ID;
+    if (roomMode === 'manual') {
+      const roomResult = resolveCsvNamedItem('rooms', roomName, { label: 'room', prefix: 'room', createMissing });
+      if (roomResult.error) { errors.push(`Row ${rowNo}: ${roomResult.error}`); return; }
+      if (roomResult.created) created.rooms++;
+      roomId = roomResult.item.id;
+    }
+
+    sectionNames.forEach(sectionName => {
+      const sectionResult = resolveCsvNamedItem('sections', sectionName, { label: 'section', prefix: 'section', createMissing });
+      if (sectionResult.error) { errors.push(`Row ${rowNo}: ${sectionResult.error}`); return; }
+      if (sectionResult.created) created.sections++;
+      const patch = {
+        sectionId: sectionResult.item.id,
+        subjectId: subjectResult.item.id,
+        teacherId: teacherResult.item.id,
+        meetings,
+        duration,
+        roomMode,
+        roomId: roomMode === 'manual' ? roomId : DEFAULT_ROOM_ID
+      };
+      const existingIndex = data.teachingLoads.findIndex(load =>
+        load.sectionId === patch.sectionId && load.subjectId === patch.subjectId && load.teacherId === patch.teacherId
+      );
+      if (existingIndex >= 0) {
+        data.teachingLoads[existingIndex] = { ...data.teachingLoads[existingIndex], ...patch };
+        updated++;
+      } else {
+        data.teachingLoads.push({ id: createId('load'), ...patch });
+        added++;
+      }
+    });
+  });
+
+  if (!added && !updated && errors.length) {
+    return showAlert(`No teaching loads were imported.\n\n${errors.slice(0, 10).join('\n')}${errors.length > 10 ? `\n…and ${errors.length - 10} more issue(s).` : ''}`, 'error');
+  }
+  saveData();
+  renderAll();
+  if (els.loadCsvFile) els.loadCsvFile.value = '';
+  const creationSummary = Object.entries(created).filter(([, count]) => count).map(([key, count]) => `${count} ${key}`);
+  const issueSummary = errors.length ? `\n\nIssues found:\n${errors.slice(0, 8).join('\n')}${errors.length > 8 ? `\n…and ${errors.length - 8} more issue(s).` : ''}` : '';
+  showAlert(`CSV import finished: ${added} added, ${updated} updated, ${skipped} skipped.${creationSummary.length ? ` Created: ${creationSummary.join(', ')}.` : ''}${issueSummary}`, errors.length ? 'warning' : 'success');
 }
 
 function validateCoreDataForScheduling() {
@@ -1619,6 +1907,9 @@ if (els.fixedSelectMatchingSections) els.fixedSelectMatchingSections.addEventLis
 if (els.fixedTeacherSelectMatching) els.fixedTeacherSelectMatching.addEventListener('click', selectMatchingFixedTeachers);
 if (els.fixedTeacherSelectAll) els.fixedTeacherSelectAll.addEventListener('click', () => setAllFixedTeachers(true));
 if (els.fixedTeacherClear) els.fixedTeacherClear.addEventListener('click', () => setAllFixedTeachers(false));
+if (els.fixedAddOffering) els.fixedAddOffering.addEventListener('click', () => addFixedOfferingRow({ title: els.fixedTitle?.value || 'Elective', roomMode: 'default' }));
+if (els.fixedOfferingList) els.fixedOfferingList.addEventListener('click', e => { if (e.target.closest('.remove-offering-btn')) { e.target.closest('.batch-offering-row')?.remove(); if (!els.fixedOfferingList.querySelector('.batch-offering-row')) setFixedOfferings([]); } });
+if (els.fixedOfferingList) els.fixedOfferingList.addEventListener('change', e => { const row = e.target.closest('.batch-offering-row'); if (row && e.target.classList.contains('fixed-offering-room-mode')) toggleOfferingRoom(row); });
 if (els.fixedType) els.fixedType.addEventListener('change', toggleFixedSubjectFields);
 if (els.fixedSubject) els.fixedSubject.addEventListener('change', syncFixedSubjectDefaults);
 if (els.fixedRoomMode) els.fixedRoomMode.addEventListener('change', toggleFixedSubjectFields);
@@ -1629,6 +1920,8 @@ els.loadSubject.addEventListener('change', () => { const subject = data.subjects
 if (els.loadSelectAllSections) els.loadSelectAllSections.addEventListener('click', () => setAllLoadSections(true));
 if (els.loadClearSections) els.loadClearSections.addEventListener('click', () => setAllLoadSections(false));
 if (els.loadSelectMatchingSections) els.loadSelectMatchingSections.addEventListener('click', selectMatchingLoadSections);
+if (els.loadCsvTemplateBtn) els.loadCsvTemplateBtn.addEventListener('click', downloadTeachingLoadTemplate);
+if (els.loadCsvImportBtn) els.loadCsvImportBtn.addEventListener('click', importTeachingLoadsFromCsv);
 els.roomMode.addEventListener('change', () => els.manualRoomWrap.classList.toggle('hidden', els.roomMode.value !== 'manual'));
 els.loadRoomMode.addEventListener('change', () => els.loadManualRoomWrap.classList.toggle('hidden', els.loadRoomMode.value !== 'manual'));
 els.scheduleForm.addEventListener('submit', e => {

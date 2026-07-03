@@ -455,18 +455,15 @@
             <div class="compact-settings-form">
               <div class="full-row">
                 <div class="inline-toolbar">
-                  <p class="field-label">Teachers assigned during this batch-wide block</p>
+                  <p class="field-label">Specific offerings for teacher and room views</p>
                   <div class="inline-actions">
-                    <input type="search" id="fixedTeacherFilter" class="mini-search" placeholder="Filter teacher name" />
-                    <button type="button" id="fixedTeacherSelectMatching" class="secondary compact-btn">Select Matching</button>
-                    <button type="button" id="fixedTeacherSelectAll" class="secondary compact-btn">Select All</button>
-                    <button type="button" id="fixedTeacherClear" class="secondary compact-btn">Clear</button>
+                    <button type="button" id="fixedAddOffering" class="secondary compact-btn">Add Offering</button>
                   </div>
                 </div>
-                <div id="fixedTeacherChoices" class="section-checkbox-list"></div>
+                <div id="fixedOfferingList" class="batch-offering-list"></div>
               </div>
             </div>
-            <p class="hint">Use Batch-Wide Subject Block for electives or research periods where all sections are blocked at the same time. Section calendars show only the display name, such as Elective. Selected teachers also show that same display name in their weekly schedule.</p>
+            <p class="hint">Use Batch-Wide Subject Block for electives or research periods where all sections are blocked at the same time. Section calendars show only the display name, such as Elective. Teacher and room calendars show the specific offering title, such as Drone Technology Elective in Electronics Laboratory.</p>
           </div>
           <label>
             Start Time
@@ -568,6 +565,29 @@
           <button id="loadSubmitBtn" type="submit" class="primary">Add Load(s)</button>
           <button id="loadCancelEdit" type="button" class="secondary hidden">Cancel Edit</button>
         </form>
+
+        <section class="csv-import-card" aria-label="Import teaching loads from CSV">
+          <div class="csv-import-header">
+            <div>
+              <p class="eyebrow">Bulk Upload</p>
+              <h3>Import Teaching Loads from CSV</h3>
+            </div>
+            <button id="loadCsvTemplateBtn" type="button" class="secondary compact-btn">Download Template</button>
+          </div>
+          <div class="csv-import-grid">
+            <label>
+              CSV File
+              <input type="file" id="loadCsvFile" accept=".csv,text/csv" />
+            </label>
+            <label class="checkbox-row csv-checkbox">
+              <input type="checkbox" id="loadCsvCreateMissing" checked />
+              Create missing teachers, subjects, sections, and rooms from CSV
+            </label>
+            <button id="loadCsvImportBtn" type="button" class="primary">Import CSV</button>
+          </div>
+          <p class="hint">CSV columns: <strong>teacher, subject, sections, meetings, duration, roomMode, room, teacherStart</strong>. Use semicolon or vertical bar for multiple sections, for example: <code>Grade 7 - Diamond; Grade 7 - Jade</code>. Room mode may be <code>default</code>, <code>auto</code>, or <code>manual</code>.</p>
+        </section>
+
         <ul id="teachingLoadList" class="item-list modal-list"></ul>
         <p class="hint">Use this to assign one teacher and subject to several sections at once, such as Santos teaching English 1 for all Grade 7 sections. Lab loads can request auto or manual room assignment.</p>
       </div>
