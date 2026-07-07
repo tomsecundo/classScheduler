@@ -331,3 +331,13 @@ body.control-modal-open { overflow: hidden; }
   .csv-import-grid { grid-template-columns: 1fr; }
   .csv-checkbox { margin-bottom: 0; }
 }
+
+/* Waitlist / queue */
+.waitlist-toolbar { justify-content: flex-end; margin-bottom: 12px; }
+.waitlist-list li { align-items: flex-start; }
+.waitlist-item strong { color: var(--text); }
+.waitlist-item .item-actions { justify-content: flex-end; min-width: 260px; }
+@media (max-width: 720px) {
+  .waitlist-item { display: grid !important; }
+  .waitlist-item .item-actions { min-width: 0; justify-content: flex-start; }
+}

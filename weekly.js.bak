@@ -16,7 +16,6 @@ let currentId = null;
 let currentEntity = null;
 let browserMode = null;
 let activeDragScheduleId = null;
-let pointerDragState = null;
 
 const els = {
   viewEyebrow: document.getElementById('viewEyebrow'), viewTitle: document.getElementById('viewTitle'), viewSubtitle: document.getElementById('viewSubtitle'), printBtn: document.getElementById('printBtn'), closeBtn: document.getElementById('closeBtn'), refreshBtn: document.getElementById('refreshBtn'), editToggle: document.getElementById('editToggle'),
@@ -201,54 +200,7 @@ function getTeacherStartTime(teacherId, source = schedulerData) { const teacher 
 function getTeacherStartConflict(schedule, source = schedulerData) { if (!schedule || isNonTeachingFixedSchedule(schedule) || !schedule.teacherId) return ''; const teacher = (source.teachers || []).find(item => item.id === schedule.teacherId || item.name === schedule.teacherId); if (!teacher) return ''; const officialStart = getTeacherStartTime(schedule.teacherId, source); if (toMinutes(schedule.start) < toMinutes(officialStart)) return `${teacher.name} officially starts at ${formatTime(officialStart)}, so they cannot be assigned to ${formatTime(schedule.start)}.`; return ''; }
 function isLunchSchedule(item) { const label = `${item?.title || ''} ${item?.category || ''}`.toLowerCase(); return isFixedSchedule(item) && label.includes('lunch'); }
 function getLunchBlocks(source = schedulerData) { return expandFixedActivities(source).filter(isLunchSchedule); }
-function getTeacherLunchWindow(source = schedulerData) { return { start: source.settings?.teacherLunchStart || '10:30', end: source.settings?.teacherLunchEnd || '13:00', duration: Number(source.settings?.teacherLunchDuration || source.settings?.slotDuration || 50) }; }
-function teacherBusySlotsForDay(teacherId, day, schedules = getDisplayScheduleItems(), candidate = null, ignoreId = null, source = schedulerData) {
-  const candidateId = candidate?.id || '__candidate__';
-  return [...(schedules || []), candidate]
-    .filter(Boolean)
-    .filter(item => item.day === day && item.teacherId === teacherId)
-    .filter(item => item.id !== ignoreId)
-    .filter(item => item.id !== candidateId || item === candidate)
-    .filter(item => isClassLikeSchedule(item))
-    .map(item => ({ start: toMinutes(item.start), end: toMinutes(item.start) + Number(item.duration || 0) }))
-    .filter(slot => slot.end > slot.start)
-    .sort((a, b) => a.start - b.start || a.end - b.end);
-}
-function teacherHasOpenWindowOnDay(teacherId, day, startMinute, duration, schedules, candidate, ignoreId, source = schedulerData) {
-  const endMinute = startMinute + Number(duration || 0);
-  return !teacherBusySlotsForDay(teacherId, day, schedules, candidate, ignoreId, source)
-    .some(slot => startMinute < slot.end && slot.start < endMinute);
-}
-function hasTeacherLunchWindow(schedule, schedules = getDisplayScheduleItems(), ignoreId = null, source = schedulerData) {
-  if (!schedule || isNonTeachingFixedSchedule(schedule) || !schedule.teacherId || !schedule.day) return true;
-  const window = getTeacherLunchWindow(source);
-  const windowStart = toMinutes(window.start);
-  const windowEnd = toMinutes(window.end);
-  const needed = Math.max(1, Number(window.duration || 50));
-  if (windowEnd <= windowStart || needed > (windowEnd - windowStart)) return true;
-  const commonLunchDays = ['Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-  if (commonLunchDays.includes(schedule.day)) {
-    for (let start = windowStart; start + needed <= windowEnd; start += 5) {
-      const isCommonFree = commonLunchDays.every(day => teacherHasOpenWindowOnDay(schedule.teacherId, day, start, needed, schedules, schedule, ignoreId, source));
-      if (isCommonFree) return true;
-    }
-    return false;
-  }
-  for (let start = windowStart; start + needed <= windowEnd; start += 5) {
-    if (teacherHasOpenWindowOnDay(schedule.teacherId, schedule.day, start, needed, schedules, schedule, ignoreId, source)) return true;
-  }
-  return false;
-}
-function getTeacherLunchConflict(schedule, schedules = getDisplayScheduleItems(), ignoreId = null, source = schedulerData) {
-  if (!schedule || isNonTeachingFixedSchedule(schedule) || !schedule.teacherId) return '';
-  const teacher = (source.teachers || []).find(item => item.id === schedule.teacherId || item.name === schedule.teacherId);
-  if (!teacher) return '';
-  if (hasTeacherLunchWindow(schedule, schedules, ignoreId, source)) return '';
-  const window = getTeacherLunchWindow(source);
-  const commonLunchDays = ['Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-  if (commonLunchDays.includes(schedule.day)) return `${teacher.name} needs the same ${window.duration}-minute lunch window from Tuesday to Friday between ${formatTime(window.start)} and ${formatTime(window.end)}. This assignment would remove every common lunch window.`;
-  return `${teacher.name} needs at least ${window.duration} minutes for lunch between ${formatTime(window.start)} and ${formatTime(window.end)}. This assignment would remove all available lunch windows for the day.`;
-}
+function getTeacherLunchConflict(schedule, source = schedulerData) { if (!schedule || isNonTeachingFixedSchedule(schedule) || !schedule.teacherId) return ''; const teacher = (source.teachers || []).find(item => item.id === schedule.teacherId || item.name === schedule.teacherId); if (!teacher) return ''; const overlap = getLunchBlocks(source).find(lunch => lunch.day === schedule.day && overlaps(schedule.start, schedule.duration, lunch.start, lunch.duration)); if (!overlap) return ''; return `${teacher.name} must keep a lunch break around ${timeRange(overlap.start, overlap.duration)}. Assign this class outside the protected lunch slot.`; }
 function getDayWindowConflict(schedule, source = schedulerData) {
   if (!schedule || isNonTeachingFixedSchedule(schedule) || !schedule.day) return '';
   const teachingStart = getDayTeachingStart(schedule.day, source);
@@ -333,13 +285,13 @@ function getViewConfig(kind = currentKind) {
     section: {
       collectionName: 'sections', scheduleField: 'sectionId', legacyField: 'section', eyebrow: 'Section Weekly Calendar', subtitle: 'Monday to Friday section schedule view. Fixed activities are protected and cannot be moved.', printLabel: 'Print Section Schedule', emptyMessage: 'No weekly schedule has been created for this section yet.', missingMessage: 'Section not found. Open this view from the main scheduler again.',
       block(item) {
-        if (isFixedSchedule(item) && !isFixedTeachingSchedule(item)) return [`<strong>${escapeHtml(item.title || 'Fixed Activity')}</strong>`, `<span class="class-time">${escapeHtml(timeRange(item.start, item.duration))}</span>`].join('');
-        if (isBatchSubjectSchedule(item)) return [`<strong>${escapeHtml(fixedDisplayTitle(item))}</strong>`, `<span class="class-time">${escapeHtml(timeRange(item.start, item.duration))}</span>`].join('');
+        if (isFixedSchedule(item) && !isFixedTeachingSchedule(item)) return [`<strong>${escapeHtml(item.title || 'Fixed Activity')}</strong>`, `<span class="class-time">${escapeHtml(timeRange(item.start, item.duration))}</span>`, '<span>Fixed Activity</span>', '<span>Protected slot</span>'].join('');
+        if (isBatchSubjectSchedule(item)) return [`<strong>${escapeHtml(fixedDisplayTitle(item))}</strong>`, `<span class="class-time">${escapeHtml(timeRange(item.start, item.duration))}</span>`, '<span>Batch-wide block</span>', '<span>Students go to their chosen class</span>'].join('');
         const subjectTitle = isFixedSubjectSchedule(item) ? (item.title || byName(schedulerData.subjects, item.subjectId)) : byName(schedulerData.subjects, item.subjectId);
         return [`<strong>${escapeHtml(subjectTitle)}</strong>`, `<span class="class-time">${escapeHtml(timeRange(item.start, item.duration))}</span>`, `<span>${escapeHtml(byName(schedulerData.teachers, item.teacherId))}${isFixedSubjectSchedule(item) ? ' · Fixed Subject' : ''}</span>`, `<span>${escapeHtml(byName(schedulerData.rooms, item.roomId))}</span>`].join('');
       }
     },
-    teacher: { collectionName: 'teachers', scheduleField: 'teacherId', legacyField: 'teacher', eyebrow: 'Teacher Weekly Calendar', subtitle: 'Monday to Friday teaching load view. Use this to check teacher assignments and print individual schedules.', printLabel: 'Print Teacher Schedule', emptyMessage: 'No weekly schedule has been created for this teacher yet.', missingMessage: 'Teacher not found. Open this view from the main scheduler again.', block(item) { if (isBatchSubjectSchedule(item)) return [`<strong>${escapeHtml(fixedDisplayTitle(item))}</strong>`, `<span class="class-time">${escapeHtml(timeRange(item.start, item.duration))}</span>`, '<span>Batch-wide elective/research block</span>', `<span>${escapeHtml(byName(schedulerData.rooms, item.roomId))}</span>`].join(''); return [`<strong>${escapeHtml(byName(schedulerData.sections, item.sectionId))}</strong>`, `<span class="class-time">${escapeHtml(timeRange(item.start, item.duration))}</span>`, `<span>${escapeHtml(isFixedTeachingSchedule(item) ? fixedDisplayTitle(item) : byName(schedulerData.subjects, item.subjectId))}</span>`, `<span>${escapeHtml(byName(schedulerData.rooms, item.roomId))}</span>`].join(''); } },
+    teacher: { collectionName: 'teachers', scheduleField: 'teacherId', legacyField: 'teacher', eyebrow: 'Teacher Weekly Calendar', subtitle: 'Monday to Friday teaching load view. Use this to check teacher assignments and print individual schedules.', printLabel: 'Print Teacher Schedule', emptyMessage: 'No weekly schedule has been created for this teacher yet.', missingMessage: 'Teacher not found. Open this view from the main scheduler again.', block(item) { if (isBatchSubjectSchedule(item)) return [`<strong>${escapeHtml(fixedDisplayTitle(item))}</strong>`, `<span class="class-time">${escapeHtml(timeRange(item.start, item.duration))}</span>`, '<span>Batch-wide elective/research block</span>', '<span>Protected teacher load</span>'].join(''); return [`<strong>${escapeHtml(byName(schedulerData.sections, item.sectionId))}</strong>`, `<span class="class-time">${escapeHtml(timeRange(item.start, item.duration))}</span>`, `<span>${escapeHtml(isFixedTeachingSchedule(item) ? fixedDisplayTitle(item) : byName(schedulerData.subjects, item.subjectId))}</span>`, `<span>${escapeHtml(byName(schedulerData.rooms, item.roomId))}</span>`].join(''); } },
     room: { collectionName: 'rooms', scheduleField: 'roomId', legacyField: 'room', eyebrow: 'Room Weekly Calendar', subtitle: 'Monday to Friday laboratory/special room usage view. Print this schedule for room posting or room monitoring.', printLabel: 'Print Room Schedule', emptyMessage: 'No weekly schedule has been created for this room yet.', missingMessage: 'Room not found. Open this view from the main scheduler again.', block(item) { if (isBatchSubjectSchedule(item)) return [`<strong>${escapeHtml(fixedDisplayTitle(item))}</strong>`, `<span class="class-time">${escapeHtml(timeRange(item.start, item.duration))}</span>`, '<span>Batch-wide elective/research offering</span>', `<span>${escapeHtml(byName(schedulerData.teachers, item.teacherId))}</span>`].join(''); return [`<strong>${escapeHtml(byName(schedulerData.sections, item.sectionId))}</strong>`, `<span class="class-time">${escapeHtml(timeRange(item.start, item.duration))}</span>`, `<span>${escapeHtml(isFixedTeachingSchedule(item) ? fixedDisplayTitle(item) : byName(schedulerData.subjects, item.subjectId))}</span>`, `<span>${escapeHtml(byName(schedulerData.teachers, item.teacherId))}</span>`].join(''); } }
   }[kind] || null;
 }
@@ -496,7 +448,7 @@ function getConflicts(newSchedule, ignoreId = null) {
   if (dayWindowConflict) conflicts.push(dayWindowConflict);
   const teacherStartConflict = getTeacherStartConflict(newSchedule);
   if (teacherStartConflict) conflicts.push(teacherStartConflict);
-  const teacherLunchConflict = getTeacherLunchConflict(newSchedule, schedules, ignoreId);
+  const teacherLunchConflict = getTeacherLunchConflict(newSchedule);
   if (teacherLunchConflict) conflicts.push(teacherLunchConflict);
   const newIsClassLike = isClassLikeSchedule(newSchedule);
   allScheduleItems().forEach(existing => {
@@ -645,109 +597,45 @@ function exportCurrentIcs() {
 }
 function renderHeader() { renderNavigator(); const config = getViewConfig(); if (!config || !currentEntity) { els.viewEyebrow.textContent = 'Weekly Calendar'; els.viewTitle.textContent = 'Schedule Not Found'; els.viewSubtitle.textContent = config?.missingMessage || 'Open this view from the main scheduler again.'; els.printBtn.textContent = 'Print Schedule'; return; } document.title = `${currentEntity.name} Weekly Schedule`; els.viewEyebrow.textContent = browserMode ? (browserMode === 'sections' ? 'Section Schedule Browser' : 'Teacher Schedule Browser') : config.eyebrow; els.viewTitle.textContent = currentEntity.name; els.viewSubtitle.textContent = browserMode ? 'Use the dropdown below to switch calendars quickly. This view remains printable and exportable.' : config.subtitle; els.printBtn.textContent = config.printLabel; }
 function renderSummary() { const schedules = filteredSchedules().filter(isClassLikeSchedule); els.totalClasses.textContent = schedules.length; els.totalMinutes.textContent = schedules.reduce((sum,item) => sum + Number(item.duration || 0), 0); els.dailySummary.innerHTML = DAYS.map(day => `<span><strong>${day.slice(0,3)}</strong> ${schedules.filter(item => item.day === day).length}</span>`).join(''); els.generatedAt.textContent = new Date().toLocaleString(); }
-const TIMELINE_HOUR_HEIGHT = 96;
-const TIMELINE_PX_PER_MINUTE = TIMELINE_HOUR_HEIGHT / 60;
-
-function getTimelineRange(items = filteredSchedules()) {
-  const settings = normalizeSettings(schedulerData.settings || defaultData.settings);
-  const baseStart = toMinutes(settings.dayStart || defaultData.settings.dayStart);
-  const baseEnd = toMinutes(settings.dayEnd || defaultData.settings.dayEnd);
-  const starts = [baseStart, ...DAYS.map(day => toMinutes(getDayTeachingStart(day)))];
-  const ends = [baseEnd];
-  items.forEach(item => {
-    starts.push(toMinutes(item.start));
-    ends.push(toMinutes(item.start) + Number(item.duration || settings.slotDuration || 50));
-  });
-  const minStart = Math.min(...starts.filter(Number.isFinite));
-  const maxEnd = Math.max(...ends.filter(Number.isFinite));
-  const start = Math.floor(minStart / 60) * 60;
-  const end = Math.ceil(maxEnd / 60) * 60;
-  return { start, end, height: Math.max(TIMELINE_HOUR_HEIGHT, (end - start) * TIMELINE_PX_PER_MINUTE) };
-}
-function timelineTop(start, range) { return Math.max(0, (toMinutes(start) - range.start) * TIMELINE_PX_PER_MINUTE); }
-function timelineHeight(duration) { return Math.max(18, Number(duration || 0) * TIMELINE_PX_PER_MINUTE); }
-function renderHourLabels(range) {
-  const labels = [];
-  for (let t = range.start; t < range.end; t += 60) {
-    labels.push(`<div class="hour-label" style="top:${(t - range.start) * TIMELINE_PX_PER_MINUTE}px">${escapeHtml(formatTime(fromMinutes(t)))}</div>`);
-  }
-  return labels.join('');
-}
-function renderTimelineEvent(config, item, range) {
-  const top = timelineTop(item.start, range);
-  const height = timelineHeight(item.duration);
-  const movable = editing && !isFixedSchedule(item);
-  const fixedClass = isFixedSchedule(item) ? ' fixed-block' : '';
-  const compactClass = Number(item.duration || 0) <= 30 ? ' compact-event' : '';
-  return `<div class="class-block event-block${fixedClass}${compactClass}" style="top:${top}px;height:${height}px" draggable="false" data-schedule-id="${escapeHtml(item.id)}">${config.block(item)}</div>`;
-}
-function renderDayColumn(config, day, schedules, range) {
-  const dayItems = schedules.filter(item => item.day === day).sort((a, b) => toMinutes(a.start) - toMinutes(b.start) || Number(b.duration || 0) - Number(a.duration || 0));
-  return `<div class="day-column" data-day="${escapeHtml(day)}" style="height:${range.height}px" aria-label="${escapeHtml(day)} schedule">${dayItems.map(item => renderTimelineEvent(config, item, range)).join('')}</div>`;
-}
-function renderTimeline(config, schedules) {
-  const range = getTimelineRange(schedules);
-  return `<div class="timeline-content" style="--timeline-height:${range.height}px;--hour-height:${TIMELINE_HOUR_HEIGHT}px"><div class="time-ruler" style="height:${range.height}px">${renderHourLabels(range)}</div>${DAYS.map(day => renderDayColumn(config, day, schedules, range)).join('')}</div>`;
-}
 function renderCalendar() {
   const config = getViewConfig();
   renderHeader();
   renderSummary();
   if (!config || !currentEntity) {
-    els.calendarBody.innerHTML = '<div class="empty-state">Unable to load this weekly view. Please open it again from the main scheduler.</div>';
+    els.calendarBody.innerHTML = '<tr><td colspan="7" class="empty-state">Unable to load this weekly view. Please open it again from the main scheduler.</td></tr>';
     return;
   }
   const schedules = filteredSchedules();
+  const rowSets = generateStartRows();
   if (!schedules.length) {
-    els.calendarBody.innerHTML = `<div class="empty-state">${escapeHtml(config.emptyMessage)}</div>`;
+    els.calendarBody.innerHTML = `<tr><td colspan="7" class="empty-state">${escapeHtml(config.emptyMessage)}</td></tr>`;
     return;
   }
-  els.calendarBody.innerHTML = renderTimeline(config, schedules);
+  const weekdayDays = ['Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+  const spanState = DAYS.reduce((state, day) => ({ ...state, [day]: 0 }), {});
+  els.calendarBody.innerHTML = Array.from({ length: rowSets.maxRows }, (_, index) => {
+    const mondayStart = rowSets.monday[index] || '';
+    const weekdayStart = rowSets.weekdays[index] || '';
+    return `<tr>${renderTimeHeaderCell('Monday', mondayStart, rowSets.monday)}${renderScheduleCell(config, 'Monday', mondayStart, schedules, rowSets.monday, spanState)}${renderTimeHeaderCell('Tuesday', weekdayStart, rowSets.weekdays)}${weekdayDays.map(day => renderScheduleCell(config, day, weekdayStart, schedules, rowSets.weekdays, spanState)).join('')}</tr>`;
+  }).join('');
 }
 
 function clearDropAvailabilityHighlights() {
   activeDragScheduleId = null;
   document.body.classList.remove('drag-preview-active');
-  document.querySelectorAll('.drop-slot').forEach(slot => slot.remove());
+  document.querySelectorAll('.drop-cell.available-drop, .drop-cell.blocked-drop, .drop-cell.original-drop, .drop-cell.drag-over').forEach(cell => {
+    cell.classList.remove('available-drop', 'blocked-drop', 'original-drop', 'drag-over');
+    cell.removeAttribute('data-drop-status');
+    cell.setAttribute('data-drop-label', 'Drop here');
+  });
 }
 function getScheduleById(scheduleId) {
   return schedulerData.schedules.find(item => item.id === scheduleId) || null;
 }
-function getRelevantItemsForDropSchedule(schedule) {
-  if (!schedule?.sectionId) return filteredSchedules();
-  return allScheduleItems().filter(item => item.sectionId === schedule.sectionId || item.id === schedule.id);
-}
-function getCandidateStartsForDrop(day, schedule) {
-  const relevantItems = getRelevantItemsForDropSchedule(schedule);
-  return getFlexibleStartsForDay(day, relevantItems)
-    .filter(start => toMinutes(start) + Number(schedule.duration || 0) <= toMinutes(getDayEnd(day)))
-    .filter((start, index, list) => list.indexOf(start) === index);
-}
-function isDropSlotAvailable(schedule, slot) {
-  if (!schedule || !slot?.dataset?.day || !slot.dataset.start) return false;
-  const candidate = { ...schedule, day: slot.dataset.day, start: slot.dataset.start };
+function isDropCellAvailable(schedule, cell) {
+  if (!schedule || !cell?.dataset?.day || !cell?.dataset?.start) return false;
+  const candidate = { ...schedule, day: cell.dataset.day, start: cell.dataset.start };
   return getConflicts(candidate, schedule.id).length === 0;
-}
-function createDropSlot(dayColumn, day, start, schedule, range) {
-  const slot = document.createElement('div');
-  slot.className = 'drop-slot';
-  slot.dataset.day = day;
-  slot.dataset.start = start;
-  slot.style.top = `${timelineTop(start, range)}px`;
-  slot.style.height = `${timelineHeight(schedule.duration)}px`;
-  const isOriginal = day === schedule.day && start === schedule.start;
-  if (isDropSlotAvailable(schedule, slot)) {
-    slot.classList.add('available-drop');
-    if (isOriginal) slot.classList.add('original-drop');
-    slot.dataset.dropStatus = isOriginal ? 'Current slot' : 'Available';
-    slot.setAttribute('data-drop-label', isOriginal ? 'Current slot' : 'Available');
-  } else {
-    slot.classList.add('blocked-drop');
-    slot.dataset.dropStatus = 'Unavailable';
-    slot.setAttribute('data-drop-label', 'Unavailable');
-  }
-  dayColumn.appendChild(slot);
-  return slot;
 }
 function markAvailableDropSlots(scheduleId) {
   clearDropAvailabilityHighlights();
@@ -755,122 +643,31 @@ function markAvailableDropSlots(scheduleId) {
   if (!schedule) return;
   activeDragScheduleId = scheduleId;
   document.body.classList.add('drag-preview-active');
-  const schedules = filteredSchedules();
-  const range = getTimelineRange(schedules);
   let availableCount = 0;
-  document.querySelectorAll('.day-column[data-day]').forEach(dayColumn => {
-    const day = dayColumn.dataset.day;
-    getCandidateStartsForDrop(day, schedule).forEach(start => {
-      const slot = createDropSlot(dayColumn, day, start, schedule, range);
-      if (slot.classList.contains('available-drop')) availableCount += 1;
-    });
+  let blockedCount = 0;
+  document.querySelectorAll('.drop-cell[data-day][data-start]').forEach(cell => {
+    const isOriginal = cell.dataset.day === schedule.day && cell.dataset.start === schedule.start;
+    if (isDropCellAvailable(schedule, cell)) {
+      cell.classList.add('available-drop');
+      if (isOriginal) cell.classList.add('original-drop');
+      cell.dataset.dropStatus = isOriginal ? 'Current slot' : 'Available';
+      cell.setAttribute('data-drop-label', isOriginal ? 'Current slot' : 'Available');
+      availableCount += 1;
+    } else {
+      cell.classList.add('blocked-drop');
+      cell.dataset.dropStatus = 'Unavailable';
+      cell.setAttribute('data-drop-label', 'Unavailable');
+      blockedCount += 1;
+    }
   });
-  showStatus(`${availableCount} available drop slot${availableCount === 1 ? '' : 's'} highlighted. Unavailable candidate slots are muted.`);
+  showStatus(`${availableCount} available drop slot${availableCount === 1 ? '' : 's'} highlighted. Unavailable slots are muted.`);
 }
 
-function setEditingMode(value) {
-  cancelPointerDrag({ silent: true });
-  editing = Boolean(value);
-  document.body.classList.toggle('editing', editing);
-  els.editToggle.textContent = editing ? 'Edit Mode: On' : 'Edit Mode: Off';
-  els.editToggle.className = editing ? 'danger' : 'success';
-  renderCalendar();
-}
+function setEditingMode(value) { editing = Boolean(value); document.body.classList.toggle('editing', editing); els.editToggle.textContent = editing ? 'Edit Mode: On' : 'Edit Mode: Off'; els.editToggle.className = editing ? 'danger' : 'success'; renderCalendar(); }
 function showStatus(message) { els.statusLine.textContent = message; els.statusLine.className = 'good'; clearTimeout(showStatus.timer); showStatus.timer = setTimeout(() => { els.statusLine.innerHTML = `Generated: <span id="generatedAt">${new Date().toLocaleString()}</span>`; els.generatedAt = document.getElementById('generatedAt'); els.statusLine.className = ''; }, 4500); }
 function showModal(message) { els.modalMessage.textContent = message; els.messageModal.classList.remove('hidden'); document.body.classList.add('modal-open'); setTimeout(() => els.modalOkBtn.focus(), 0); }
 function closeModal() { els.messageModal.classList.add('hidden'); document.body.classList.remove('modal-open'); }
 function moveSchedule(scheduleId, targetDay, targetStart) { const schedule = schedulerData.schedules.find(item => item.id === scheduleId); if (!schedule) { showModal('Fixed activities are protected and cannot be moved. Edit them from the main scheduler if needed.'); renderCalendar(); return; } const candidate = { ...schedule, day: targetDay, start: targetStart }; const conflicts = getConflicts(candidate, schedule.id); if (conflicts.length) { showModal(conflicts.join('\n')); renderCalendar(); return; } schedule.day = targetDay; schedule.start = targetStart; saveData(); renderCalendar(); showStatus(`Schedule moved to ${targetDay} at ${formatTime(targetStart)}. Changes saved offline.`); }
-
-function removeDragGhost() {
-  if (pointerDragState?.ghost) pointerDragState.ghost.remove();
-  document.body.classList.remove('timeline-pointer-dragging');
-}
-function createDragGhost(block, event) {
-  const ghost = block.cloneNode(true);
-  ghost.classList.add('drag-ghost');
-  ghost.removeAttribute('data-schedule-id');
-  ghost.style.width = `${Math.max(180, block.getBoundingClientRect().width)}px`;
-  document.body.appendChild(ghost);
-  updateDragGhost(event);
-  return ghost;
-}
-function updateDragGhost(event) {
-  if (!pointerDragState?.ghost) return;
-  pointerDragState.ghost.style.transform = `translate3d(${event.clientX + 14}px, ${event.clientY + 14}px, 0)`;
-}
-function activatePointerDrag(event) {
-  if (!pointerDragState || pointerDragState.dragging) return;
-  pointerDragState.dragging = true;
-  pointerDragState.block.classList.add('dragging');
-  document.body.classList.add('timeline-pointer-dragging');
-  markAvailableDropSlots(pointerDragState.scheduleId);
-  pointerDragState.ghost = createDragGhost(pointerDragState.block, event);
-}
-function cancelPointerDrag(options = {}) {
-  if (!pointerDragState) {
-    clearDropAvailabilityHighlights();
-    return;
-  }
-  pointerDragState.block?.classList.remove('dragging');
-  removeDragGhost();
-  clearDropAvailabilityHighlights();
-  pointerDragState = null;
-  if (!options.silent) showStatus('Drag cancelled. No schedule was changed.');
-}
-function getDropSlotAtPoint(clientX, clientY) {
-  const element = document.elementFromPoint(clientX, clientY);
-  return element ? element.closest('.drop-slot') : null;
-}
-function startPointerDrag(event) {
-  if (!editing) return;
-  if (event.pointerType === 'mouse' && event.button !== 0) return;
-  const block = event.target.closest('.class-block.event-block');
-  if (!block || block.classList.contains('fixed-block')) return;
-  const scheduleId = block.dataset.scheduleId;
-  if (!scheduleId || !getScheduleById(scheduleId)) return;
-  event.preventDefault();
-  pointerDragState = {
-    scheduleId,
-    block,
-    startX: event.clientX,
-    startY: event.clientY,
-    dragging: false,
-    ghost: null
-  };
-  try { block.setPointerCapture?.(event.pointerId); } catch {}
-}
-function handlePointerMove(event) {
-  if (!pointerDragState) return;
-  const distance = Math.hypot(event.clientX - pointerDragState.startX, event.clientY - pointerDragState.startY);
-  if (!pointerDragState.dragging && distance >= 4) activatePointerDrag(event);
-  if (pointerDragState.dragging) {
-    event.preventDefault();
-    updateDragGhost(event);
-    document.querySelectorAll('.drop-slot.drag-over').forEach(slot => slot.classList.remove('drag-over'));
-    const slot = getDropSlotAtPoint(event.clientX, event.clientY);
-    if (slot?.classList.contains('available-drop')) slot.classList.add('drag-over');
-  }
-}
-function handlePointerUp(event) {
-  if (!pointerDragState) return;
-  const state = pointerDragState;
-  if (!state.dragging) {
-    pointerDragState = null;
-    return;
-  }
-  const slot = getDropSlotAtPoint(event.clientX, event.clientY);
-  const canDrop = Boolean(slot?.dataset?.day && slot?.dataset?.start && slot.classList.contains('available-drop'));
-  state.block?.classList.remove('dragging');
-  removeDragGhost();
-  clearDropAvailabilityHighlights();
-  pointerDragState = null;
-  if (!canDrop) {
-    showModal('This slot is unavailable for the selected class. Drop only on highlighted available slots.');
-    return;
-  }
-  moveSchedule(state.scheduleId, slot.dataset.day, slot.dataset.start);
-}
-
 async function refreshFromStorage() {
   if (syncConfig.enabled) await pullFromServer({ silent: true });
   else schedulerData = loadData();
@@ -900,11 +697,6 @@ if (els.exportIcsBtn) els.exportIcsBtn.addEventListener('click', exportCurrentIc
 if (els.navigatorSelect) els.navigatorSelect.addEventListener('change', event => selectBrowserEntity(event.target.value));
 els.closeBtn.addEventListener('click', () => window.close());
 els.refreshBtn.addEventListener('click', refreshFromStorage);
-els.calendarBody.addEventListener('pointerdown', startPointerDrag);
-window.addEventListener('pointermove', handlePointerMove, { passive: false });
-window.addEventListener('pointerup', handlePointerUp);
-window.addEventListener('pointercancel', () => cancelPointerDrag());
-
 els.calendarBody.addEventListener('dragstart', event => {
   const block = event.target.closest('.class-block');
   if (!editing || !block || block.classList.contains('fixed-block')) { event.preventDefault(); return; }
@@ -921,18 +713,18 @@ els.calendarBody.addEventListener('dragend', event => {
   clearDropAvailabilityHighlights();
 });
 els.calendarBody.addEventListener('dragover', event => {
-  const cell = event.target.closest('.drop-slot');
+  const cell = event.target.closest('.drop-cell');
   if (!editing || !cell || !cell.dataset.day || !cell.dataset.start || !cell.classList.contains('available-drop')) return;
   event.preventDefault();
   event.dataTransfer.dropEffect = 'move';
   cell.classList.add('drag-over');
 });
 els.calendarBody.addEventListener('dragleave', event => {
-  const cell = event.target.closest('.drop-slot');
+  const cell = event.target.closest('.drop-cell');
   if (cell && !cell.contains(event.relatedTarget)) cell.classList.remove('drag-over');
 });
 els.calendarBody.addEventListener('drop', event => {
-  const cell = event.target.closest('.drop-slot');
+  const cell = event.target.closest('.drop-cell');
   if (!editing || !cell || !cell.dataset.day || !cell.dataset.start) return;
   event.preventDefault();
   const scheduleId = event.dataTransfer.getData('text/plain') || activeDragScheduleId;

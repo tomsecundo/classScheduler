@@ -123,6 +123,8 @@
           <div class="form-actions workflow-actions">
             <button id="scheduleSubmitBtn" type="submit" class="primary">Add</button>
             <button type="button" id="autoGenerateBtn" class="success">Auto Generate Week</button>
+            <button type="button" id="reshuffleScheduleBtn" class="secondary">Generate Again</button>
+            <button type="button" id="perfectScheduleBtn" class="success">Try Until Perfect</button>
             <button type="button" id="masterResetScheduleBtn" class="danger">Master Reset Weekly Schedule</button>
             <button type="button" id="clearScheduleForm" class="secondary">Clear</button>
             <button type="button" id="scheduleCancelEdit" class="secondary hidden">Cancel Edit</button>
@@ -234,6 +236,10 @@
         <button type="button" class="control-action-btn" data-control-open="loads" role="listitem">
           <span>Teaching Loads</span>
           <small id="loadButtonCount">0 teaching loads</small>
+        </button>
+        <button type="button" class="control-action-btn" data-control-open="waitlist" role="listitem">
+          <span>Waitlist / Queue</span>
+          <small id="waitlistButtonCount">0 unplaced classes</small>
         </button>
         <button type="button" class="control-action-btn" data-control-open="sync" role="listitem">
           <span>MongoDB Sync</span>
@@ -412,6 +418,7 @@
         <form id="fixedActivityForm" class="stacked-form compact-settings-form fixed-modal-grid">
           <div class="preset-actions full-row">
             <button type="button" id="fixedLunchPreset" class="secondary compact-btn">Lunch M-F</button>
+            <button type="button" id="fixedSwpPreset" class="secondary compact-btn">SWP M-F</button>
             <button type="button" id="fixedFlagCeremonyPreset" class="secondary compact-btn">Flag Ceremony</button>
             <button type="button" id="fixedFlagRetreatPreset" class="secondary compact-btn">Flag Retreat</button>
           </div>
@@ -467,7 +474,7 @@
           </div>
           <label>
             Start Time
-            <select id="fixedStart" required></select>
+            <input type="time" id="fixedStart" step="300" value="07:30" required />
           </label>
           <label>
             Duration
@@ -584,12 +591,36 @@
               Create missing teachers, subjects, sections, and rooms from CSV
             </label>
             <button id="loadCsvImportBtn" type="button" class="primary">Import CSV</button>
+            <button id="resetTeachingLoadsBtn" type="button" class="danger compact-btn full-row">Delete All Teaching Loads</button>
           </div>
           <p class="hint">CSV columns: <strong>teacher, subject, sections, meetings, duration, roomMode, room, teacherStart</strong>. Use semicolon or vertical bar for multiple sections, for example: <code>Grade 7 - Diamond; Grade 7 - Jade</code>. Room mode may be <code>default</code>, <code>auto</code>, or <code>manual</code>.</p>
         </section>
 
         <ul id="teachingLoadList" class="item-list modal-list"></ul>
         <p class="hint">Use this to assign one teacher and subject to several sections at once, such as Santos teaching English 1 for all Grade 7 sections. Lab loads can request auto or manual room assignment.</p>
+      </div>
+    </section>
+  </div>
+
+
+  <div id="controlModal-waitlist" class="control-modal hidden no-print" role="dialog" aria-modal="true" aria-labelledby="controlTitle-waitlist">
+    <div class="control-modal-backdrop" data-control-modal-close></div>
+    <section class="control-modal-panel wide" role="document">
+      <button type="button" class="modal-close" data-control-modal-close aria-label="Close dialog">&times;</button>
+      <div class="control-modal-header">
+        <div>
+          <p class="eyebrow">Manual Follow-up</p>
+          <h2 id="controlTitle-waitlist">Waitlist / Queue</h2>
+          <p class="hint">Unplaced classes are kept here after auto-generation. Load one into the main form, try auto-place, or clear items once resolved.</p>
+        </div>
+        <span id="waitlistCount" class="count-pill">0 unplaced</span>
+      </div>
+      <div class="control-modal-body">
+        <div class="inline-actions waitlist-toolbar">
+          <button type="button" id="tryPlaceWaitlistBtn" class="secondary">Try Place All</button>
+          <button type="button" id="clearWaitlistBtn" class="danger">Clear Waitlist</button>
+        </div>
+        <ul id="waitlistList" class="item-list modal-list waitlist-list"></ul>
       </div>
     </section>
   </div>

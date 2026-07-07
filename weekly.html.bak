@@ -42,17 +42,20 @@
     </section>
 
     <section class="calendar-card">
-      <div id="weeklyCalendar" class="week-timeline" aria-label="Weekly schedule calendar">
-        <div class="timeline-header" aria-hidden="true">
-          <div class="timeline-time-heading">Time</div>
-          <div class="timeline-day-heading">Monday</div>
-          <div class="timeline-day-heading">Tuesday</div>
-          <div class="timeline-day-heading">Wednesday</div>
-          <div class="timeline-day-heading">Thursday</div>
-          <div class="timeline-day-heading">Friday</div>
-        </div>
-        <div id="calendarBody" class="timeline-body"></div>
-      </div>
+      <table id="weeklyTable" aria-label="Weekly schedule calendar">
+        <thead>
+          <tr>
+            <th>Monday Time</th>
+            <th>Monday</th>
+            <th>Tue-Fri Time</th>
+            <th>Tuesday</th>
+            <th>Wednesday</th>
+            <th>Thursday</th>
+            <th>Friday</th>
+          </tr>
+        </thead>
+        <tbody id="calendarBody"></tbody>
+      </table>
     </section>
 
     <p id="statusLine">Generated: <span id="generatedAt"></span></p>
