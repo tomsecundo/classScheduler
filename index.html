@@ -129,6 +129,17 @@
             <button type="button" id="clearScheduleForm" class="secondary">Clear</button>
             <button type="button" id="scheduleCancelEdit" class="secondary hidden">Cancel Edit</button>
           </div>
+
+          <div id="generationProgress" class="generation-progress hidden" aria-live="polite">
+            <div class="generation-progress-head">
+              <strong id="generationProgressTitle">Trying schedule combinations</strong>
+              <span id="generationProgressCount">0 / 50 attempts</span>
+            </div>
+            <div class="generation-progress-track" aria-hidden="true">
+              <div id="generationProgressBar" class="generation-progress-bar"></div>
+            </div>
+            <p id="generationProgressDetail">Preparing randomized attempts...</p>
+          </div>
         </form>
       </section>
 

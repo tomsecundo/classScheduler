@@ -41,7 +41,10 @@ function normalizeData(source = {}) {
     teachers: Array.isArray(source.teachers) ? source.teachers : [],
     rooms: Array.isArray(source.rooms) ? source.rooms : [],
     teachingLoads: Array.isArray(source.teachingLoads) ? source.teachingLoads : [],
-    schedules: Array.isArray(source.schedules) ? source.schedules : []
+    fixedActivities: Array.isArray(source.fixedActivities) ? source.fixedActivities : [],
+    schedules: Array.isArray(source.schedules) ? source.schedules : [],
+    scheduleWaitlist: Array.isArray(source.scheduleWaitlist) ? source.scheduleWaitlist : [],
+    generatorRun: Number(source.generatorRun || 0)
   };
 }
 

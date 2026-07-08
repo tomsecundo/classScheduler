@@ -28,6 +28,8 @@ let pollTimer = null;
 let pendingConfirmAction = null;
 const editState = { sections: null, subjects: null, teachers: null, rooms: null, teachingLoads: null, fixedActivities: null, schedules: null };
 let pendingWaitlistId = null;
+let pendingDeferredServerPull = false;
+let pendingDeferredExternalRefresh = false;
 
 const els = {
   alert: $('alert'),
@@ -38,7 +40,7 @@ const els = {
   loadSubject: $('loadSubject'), loadTeacher: $('loadTeacher'), loadMeetings: $('loadMeetings'), loadDuration: $('loadDuration'), loadRoomMode: $('loadRoomMode'), loadManualRoomWrap: $('loadManualRoomWrap'), loadManualRoom: $('loadManualRoom'), teachingLoadList: $('teachingLoadList'), replaceExistingSchedule: $('replaceExistingSchedule'), loadSectionChoices: $('loadSectionChoices'), loadSectionFilter: $('loadSectionFilter'), loadSelectAllSections: $('loadSelectAllSections'), loadClearSections: $('loadClearSections'), loadSelectMatchingSections: $('loadSelectMatchingSections'), loadCsvFile: $('loadCsvFile'), loadCsvImportBtn: $('loadCsvImportBtn'), loadCsvTemplateBtn: $('loadCsvTemplateBtn'), loadCsvCreateMissing: $('loadCsvCreateMissing'), resetTeachingLoadsBtn: $('resetTeachingLoadsBtn'),
   fixedActivityForm: $('fixedActivityForm'), fixedType: $('fixedType'), fixedTitle: $('fixedTitle'), fixedSubjectFields: $('fixedSubjectFields'), fixedBatchFields: $('fixedBatchFields'), fixedSubject: $('fixedSubject'), fixedTeacher: $('fixedTeacher'), fixedTeacherFilter: $('fixedTeacherFilter'), fixedTeacherChoices: $('fixedTeacherChoices'), fixedTeacherSelectMatching: $('fixedTeacherSelectMatching'), fixedTeacherSelectAll: $('fixedTeacherSelectAll'), fixedTeacherClear: $('fixedTeacherClear'), fixedOfferingList: $('fixedOfferingList'), fixedAddOffering: $('fixedAddOffering'), fixedRoomMode: $('fixedRoomMode'), fixedManualRoomWrap: $('fixedManualRoomWrap'), fixedManualRoom: $('fixedManualRoom'), fixedStart: $('fixedStart'), fixedDuration: $('fixedDuration'), fixedSectionFilter: $('fixedSectionFilter'), fixedSectionChoices: $('fixedSectionChoices'), fixedActivityList: $('fixedActivityList'), fixedLunchPreset: $('fixedLunchPreset'), fixedSwpPreset: $('fixedSwpPreset'), fixedFlagCeremonyPreset: $('fixedFlagCeremonyPreset'), fixedFlagRetreatPreset: $('fixedFlagRetreatPreset'), fixedSelectAllSections: $('fixedSelectAllSections'), fixedClearSections: $('fixedClearSections'), fixedSelectMatchingSections: $('fixedSelectMatchingSections'),
   sectionList: $('sectionList'), subjectList: $('subjectList'), teacherList: $('teacherList'), roomList: $('roomList'), scheduleTable: $('scheduleTable'), filterSection: $('filterSection'), filterDay: $('filterDay'), showFixedSchedules: $('showFixedSchedules'),
-  dayStart: $('dayStart'), dayEnd: $('dayEnd'), slotDuration: $('slotDuration'), dayStartMonday: $('dayStartMonday'), dayStartTuesday: $('dayStartTuesday'), dayStartWednesday: $('dayStartWednesday'), dayStartThursday: $('dayStartThursday'), dayStartFriday: $('dayStartFriday'), mondayFlagPatternBtn: $('mondayFlagPatternBtn'), importFile: $('importFile'), exportBtn: $('exportBtn'), printBtn: $('printBtn'), exportSpreadsheetBtn: $('exportSpreadsheetBtn'), exportSpreadsheetSideBtn: $('exportSpreadsheetSideBtn'), browseSectionsBtn: $('browseSectionsBtn'), browseTeachersBtn: $('browseTeachersBtn'), clearScheduleForm: $('clearScheduleForm'), autoGenerateBtn: $('autoGenerateBtn'), reshuffleScheduleBtn: $('reshuffleScheduleBtn'), perfectScheduleBtn: $('perfectScheduleBtn'), masterResetScheduleBtn: $('masterResetScheduleBtn'),
+  dayStart: $('dayStart'), dayEnd: $('dayEnd'), slotDuration: $('slotDuration'), dayStartMonday: $('dayStartMonday'), dayStartTuesday: $('dayStartTuesday'), dayStartWednesday: $('dayStartWednesday'), dayStartThursday: $('dayStartThursday'), dayStartFriday: $('dayStartFriday'), mondayFlagPatternBtn: $('mondayFlagPatternBtn'), importFile: $('importFile'), exportBtn: $('exportBtn'), printBtn: $('printBtn'), exportSpreadsheetBtn: $('exportSpreadsheetBtn'), exportSpreadsheetSideBtn: $('exportSpreadsheetSideBtn'), browseSectionsBtn: $('browseSectionsBtn'), browseTeachersBtn: $('browseTeachersBtn'), clearScheduleForm: $('clearScheduleForm'), autoGenerateBtn: $('autoGenerateBtn'), reshuffleScheduleBtn: $('reshuffleScheduleBtn'), perfectScheduleBtn: $('perfectScheduleBtn'), masterResetScheduleBtn: $('masterResetScheduleBtn'), generationProgress: $('generationProgress'), generationProgressTitle: $('generationProgressTitle'), generationProgressCount: $('generationProgressCount'), generationProgressBar: $('generationProgressBar'), generationProgressDetail: $('generationProgressDetail'),
   syncEnabled: $('syncEnabled'), apiBaseUrl: $('apiBaseUrl'), syncStatus: $('syncStatus'), syncPullBtn: $('syncPullBtn'), syncPushBtn: $('syncPushBtn'), serverRevision: $('serverRevision'),
   statScheduledClasses: $('statScheduledClasses'), statTeachers: $('statTeachers'), statStudents: $('statStudents'), statSubjects: $('statSubjects'), statRooms: $('statRooms'),
   sectionCount: $('sectionCount'), subjectCount: $('subjectCount'), teacherCount: $('teacherCount'), roomCount: $('roomCount'), fixedCount: $('fixedCount'), loadCount: $('loadCount'),
@@ -114,6 +116,25 @@ function setSyncStatus(message, type = 'muted') {
   if (els.syncStatus) { els.syncStatus.textContent = message; els.syncStatus.className = `sync-status ${type}`; }
   if (els.serverRevision) els.serverRevision.textContent = syncConfig.enabled ? `Rev ${remoteRevision || 0}` : 'Local';
 }
+
+function getOpenControlModal() {
+  return document.querySelector('.control-modal:not(.hidden)');
+}
+function isUserEditingSchedulerInput() {
+  const active = document.activeElement;
+  const activeForm = active?.closest?.('form');
+  return Boolean(getOpenControlModal() || (activeForm && activeForm !== els.syncForm));
+}
+function deferAutoRefreshWhileEditing(reason = 'editing') {
+  if (!isUserEditingSchedulerInput()) return false;
+  pendingDeferredServerPull = true;
+  setSyncStatus(`Auto-sync paused while ${reason}. Save or close the modal to avoid losing unsaved input.`, 'warn');
+  return true;
+}
+function noteExternalRefreshDeferred() {
+  pendingDeferredExternalRefresh = true;
+  setSyncStatus('A schedule update is waiting. Close the current modal or save your input first, then pull latest if needed.', 'warn');
+}
 function renderSyncSettings() {
   if (!els.syncEnabled || !els.apiBaseUrl) return;
   els.syncEnabled.checked = Boolean(syncConfig.enabled);
@@ -144,6 +165,7 @@ function schedulePushToServer() {
 }
 async function pullFromServer({ silent = false } = {}) {
   if (!syncConfig.enabled) return false;
+  if (silent && deferAutoRefreshWhileEditing('you are entering data')) return false;
   try {
     setSyncStatus('Pulling latest schedule from server...', 'warn');
     const result = await apiRequest('/api/scheduler');
@@ -434,6 +456,44 @@ function showAlert(message, type = 'success') {
 }
 
 
+
+function sleep(ms = 0) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+function setGenerationProgress({ attempt = 0, max = 50, currentFailures = null, bestFailures = null, bestPlaced = 0, status = 'running', seed = null } = {}) {
+  if (!els.generationProgress) return;
+  const percentage = max ? Math.min(100, Math.round((attempt / max) * 100)) : 0;
+  els.generationProgress.classList.remove('hidden', 'done', 'warning');
+  if (status === 'done') els.generationProgress.classList.add('done');
+  if (status === 'warning') els.generationProgress.classList.add('warning');
+  if (els.generationProgressTitle) {
+    els.generationProgressTitle.textContent = status === 'done'
+      ? 'Perfect schedule found'
+      : status === 'warning'
+        ? 'Best attempt saved'
+        : 'Trying schedule combinations';
+  }
+  if (els.generationProgressCount) els.generationProgressCount.textContent = `${attempt} / ${max} attempts`;
+  if (els.generationProgressBar) els.generationProgressBar.style.width = `${percentage}%`;
+  if (els.generationProgressDetail) {
+    const parts = [];
+    if (currentFailures !== null) parts.push(`Current attempt: ${currentFailures} unplaced`);
+    if (bestFailures !== null) parts.push(`Best so far: ${bestFailures} unplaced, ${bestPlaced} placed`);
+    if (seed !== null && status === 'running') parts.push(`Seed: ${seed}`);
+    els.generationProgressDetail.textContent = parts.length ? parts.join(' · ') : 'Preparing randomized attempts...';
+  }
+}
+function resetGenerationProgress() {
+  if (!els.generationProgress) return;
+  els.generationProgress.classList.add('hidden');
+  els.generationProgress.classList.remove('done', 'warning');
+  if (els.generationProgressBar) els.generationProgressBar.style.width = '0%';
+}
+function setGenerationButtonsDisabled(disabled) {
+  [els.autoGenerateBtn, els.reshuffleScheduleBtn, els.perfectScheduleBtn].forEach(button => {
+    if (button) button.disabled = Boolean(disabled);
+  });
+}
 
 function setButtonText(id, text) {
   const button = $(id);
@@ -2138,38 +2198,81 @@ function commitAutoGeneration(result, options = {}) {
   }
 }
 function autoGenerateWeek() {
+  resetGenerationProgress();
   const result = runAutoGeneration({ seed: Number(data.generatorRun || 0) + 1, reshuffle: false });
   if (!result) return;
   commitAutoGeneration(result);
 }
 function reshuffleSchedule() {
+  resetGenerationProgress();
   if (!data.teachingLoads.length) return showAlert('Add teaching loads first before generating again.', 'warning');
   const seed = Date.now() + Number(data.generatorRun || 0) + 1;
   const result = runAutoGeneration({ seed, reshuffle: true, randomize: true, replace: true, priorityWeight: 0.14 });
   if (!result) return;
   commitAutoGeneration(result, { reshuffle: true });
 }
-function tryUntilPerfectSchedule(maxAttempts = 50) {
+async function tryUntilPerfectSchedule(maxAttempts = 50) {
   if (!validateAutoGenerationInputs()) return;
   let bestResult = null;
   let bestSeed = null;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const seed = Date.now() + Number(data.generatorRun || 0) * 997 + attempt * 7919;
-    const result = runAutoGeneration({ seed, reshuffle: true, randomize: true, replace: true, priorityWeight: attempt % 3 === 0 ? 0.08 : attempt % 3 === 1 ? 0.16 : 0.25 });
-    if (!result) return;
-    if (!bestResult || result.failures.length < bestResult.failures.length || (result.failures.length === bestResult.failures.length && result.generatedSchedules.length > bestResult.generatedSchedules.length)) {
-      bestResult = result;
-      bestSeed = seed;
+  setGenerationButtonsDisabled(true);
+  setGenerationProgress({ attempt: 0, max: maxAttempts, currentFailures: null, bestFailures: null });
+  await sleep(80);
+
+  try {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const seed = Date.now() + Number(data.generatorRun || 0) * 997 + attempt * 7919;
+      const result = runAutoGeneration({ seed, reshuffle: true, randomize: true, replace: true, priorityWeight: attempt % 3 === 0 ? 0.08 : attempt % 3 === 1 ? 0.16 : 0.25 });
+      if (!result) {
+        resetGenerationProgress();
+        return;
+      }
+      if (!bestResult || result.failures.length < bestResult.failures.length || (result.failures.length === bestResult.failures.length && result.generatedSchedules.length > bestResult.generatedSchedules.length)) {
+        bestResult = result;
+        bestSeed = seed;
+      }
+
+      setGenerationProgress({
+        attempt,
+        max: maxAttempts,
+        currentFailures: result.failures.length,
+        bestFailures: bestResult ? bestResult.failures.length : null,
+        bestPlaced: bestResult ? bestResult.generatedSchedules.length : 0,
+        seed
+      });
+      await sleep(25);
+
+      if (!result.failures.length) {
+        commitAutoGeneration(result, { reshuffle: true });
+        setGenerationProgress({
+          attempt,
+          max: maxAttempts,
+          currentFailures: 0,
+          bestFailures: 0,
+          bestPlaced: result.generatedSchedules.length,
+          status: 'done',
+          seed
+        });
+        showAlert(`Perfect schedule found after ${attempt} attempt${attempt === 1 ? '' : 's'}. All classes were allocated without conflicts.`);
+        return;
+      }
     }
-    if (!result.failures.length) {
-      commitAutoGeneration(result, { reshuffle: true });
-      showAlert(`Perfect schedule found after ${attempt} attempt${attempt === 1 ? '' : 's'}. All classes were allocated without conflicts.`);
-      return;
-    }
+
+    if (!bestResult) return;
+    commitAutoGeneration(bestResult, { reshuffle: true });
+    setGenerationProgress({
+      attempt: maxAttempts,
+      max: maxAttempts,
+      currentFailures: bestResult.failures.length,
+      bestFailures: bestResult.failures.length,
+      bestPlaced: bestResult.generatedSchedules.length,
+      status: bestResult.failures.length ? 'warning' : 'done',
+      seed: bestSeed
+    });
+    showAlert(`No perfect schedule was found after ${maxAttempts} randomized attempts. The best attempt was saved with ${bestResult.failures.length} unplaced class meeting${bestResult.failures.length === 1 ? '' : 's'} in the waitlist. Try again, adjust loads, extend the school day, or manually place the remaining items.`, bestResult.failures.length ? 'warning' : 'success');
+  } finally {
+    setGenerationButtonsDisabled(false);
   }
-  if (!bestResult) return;
-  commitAutoGeneration(bestResult, { reshuffle: true });
-  showAlert(`No perfect schedule was found after ${maxAttempts} randomized attempts. The best attempt was saved with ${bestResult.failures.length} unplaced class meeting${bestResult.failures.length === 1 ? '' : 's'} in the waitlist. Try again, adjust loads, extend the school day, or manually place the remaining items.`, bestResult.failures.length ? 'warning' : 'success');
 }
 function confirmTryUntilPerfectSchedule() {
   openConfirmModal({
@@ -2209,7 +2312,16 @@ function openControlModal(name) {
 function closeControlModal() {
   document.querySelectorAll('.control-modal').forEach(item => item.classList.add('hidden'));
   document.body.classList.remove('control-modal-open');
+  if (pendingDeferredServerPull || pendingDeferredExternalRefresh) {
+    pendingDeferredServerPull = false;
+    pendingDeferredExternalRefresh = false;
+    if (syncConfig.enabled) setSyncStatus('Auto-sync resumed. Use Pull if you need to load the latest server copy now.', 'good');
+  }
 }
+
+document.addEventListener('submit', e => {
+  if (e.target?.matches?.('form')) e.preventDefault();
+}, true);
 
 els.modalOkBtn.addEventListener('click', closeMessageModal);
 els.modalCloseBtn.addEventListener('click', closeMessageModal);
@@ -2310,6 +2422,7 @@ els.scheduleForm.addEventListener('submit', e => {
 els.clearScheduleForm.addEventListener('click', () => resetScheduleFormMode());
 els.autoGenerateBtn.addEventListener('click', autoGenerateWeek);
 if (els.reshuffleScheduleBtn) els.reshuffleScheduleBtn.addEventListener('click', reshuffleSchedule);
+if (els.perfectScheduleBtn) els.perfectScheduleBtn.addEventListener('click', confirmTryUntilPerfectSchedule);
 els.masterResetScheduleBtn.addEventListener('click', masterResetWeeklySchedule);
 if (els.tryPlaceWaitlistBtn) els.tryPlaceWaitlistBtn.addEventListener('click', tryPlaceAllWaitlisted);
 if (els.clearWaitlistBtn) els.clearWaitlistBtn.addEventListener('click', clearWaitlist);
@@ -2361,7 +2474,17 @@ if (els.exportSpreadsheetBtn) els.exportSpreadsheetBtn.addEventListener('click',
 if (els.exportSpreadsheetSideBtn) els.exportSpreadsheetSideBtn.addEventListener('click', exportWeeklySpreadsheet);
 if (els.browseSectionsBtn) els.browseSectionsBtn.addEventListener('click', () => openWeeklyBrowser('sections'));
 if (els.browseTeachersBtn) els.browseTeachersBtn.addEventListener('click', () => openWeeklyBrowser('teachers'));
-window.addEventListener('storage', e => { if (e.key === STORAGE_KEY) { data = loadData(); renderAll(); } });
-window.addEventListener('message', e => { if (e.data?.type === 'scheduler-data-updated') { data = loadData(); renderAll(); } });
+window.addEventListener('storage', e => {
+  if (e.key !== STORAGE_KEY) return;
+  if (isUserEditingSchedulerInput()) return noteExternalRefreshDeferred();
+  data = loadData();
+  renderAll();
+});
+window.addEventListener('message', e => {
+  if (e.data?.type !== 'scheduler-data-updated') return;
+  if (isUserEditingSchedulerInput()) return noteExternalRefreshDeferred();
+  data = loadData();
+  renderAll();
+});
 function initializeApp() { renderSyncSettings(); renderAll(); if (syncConfig.enabled) { pullFromServer({ silent: true }); startSyncPolling(); } }
 initializeApp();

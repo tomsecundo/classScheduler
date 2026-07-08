@@ -4,7 +4,7 @@ const API_REVISION_KEY = 'offlineClassScheduler.apiRevision.v1';
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 const DEFAULT_ROOM_ID = '__default_classroom__';
 const DEFAULT_ROOM_NAME = 'Default Classroom';
-const defaultData = { settings: { dayStart: '07:30', dayEnd: '16:30', slotDuration: 50, dayStarts: { Monday: '07:50', Tuesday: '07:30', Wednesday: '07:30', Thursday: '07:30', Friday: '07:30' } }, sections: [], subjects: [], teachers: [], rooms: [], teachingLoads: [], fixedActivities: [], schedules: [] };
+const defaultData = { settings: { dayStart: '07:30', dayEnd: '16:30', slotDuration: 50, dayStarts: { Monday: '07:50', Tuesday: '07:30', Wednesday: '07:30', Thursday: '07:30', Friday: '07:30' } }, sections: [], subjects: [], teachers: [], rooms: [], teachingLoads: [], fixedActivities: [], schedules: [], scheduleWaitlist: [], generatorRun: 0 };
 
 let schedulerData = loadData();
 let syncConfig = loadSyncConfig();
@@ -51,6 +51,8 @@ function normalizeData(source) {
     rooms: Array.isArray(safe.rooms) ? safe.rooms : [],
     teachingLoads: Array.isArray(safe.teachingLoads) ? safe.teachingLoads : [],
     fixedActivities: Array.isArray(safe.fixedActivities) ? safe.fixedActivities : [],
+    scheduleWaitlist: Array.isArray(safe.scheduleWaitlist) ? safe.scheduleWaitlist : [],
+    generatorRun: Number(safe.generatorRun || 0),
     schedules: Array.isArray(safe.schedules) ? safe.schedules.map(schedule => ({
       ...schedule,
       roomId: schedule.roomId || DEFAULT_ROOM_ID,
@@ -490,27 +492,28 @@ function renderScheduleCell(config, day, start, schedules, rowStarts, spanState)
   const blocks = matches.map(match => `<div class="class-block ${isFixedSchedule(match) ? 'fixed-block' : ''} ${rowSpan > 1 ? 'multi-slot-block' : ''}" draggable="${editing && !isFixedSchedule(match) ? 'true' : 'false'}" data-schedule-id="${escapeHtml(match.id)}">${config.block(match)}</div>`).join('');
   return `<td class="drop-cell${durationClass} ${matches.length ? 'has-class' : ''} ${validSlot ? '' : 'inactive-slot'}"${rowSpanAttr} data-day="${escapeHtml(day)}" data-start="${escapeHtml(start)}" data-drop-label="Drop here">${blocks}</td>`;
 }
-function getConflicts(newSchedule, ignoreId = null) {
+function getConflicts(newSchedule, ignoreId = null, comparisonItems = null) {
   const conflicts = [];
+  const items = Array.isArray(comparisonItems) ? comparisonItems : allScheduleItems();
   const dayWindowConflict = getDayWindowConflict(newSchedule);
   if (dayWindowConflict) conflicts.push(dayWindowConflict);
   const teacherStartConflict = getTeacherStartConflict(newSchedule);
   if (teacherStartConflict) conflicts.push(teacherStartConflict);
-  const teacherLunchConflict = getTeacherLunchConflict(newSchedule, schedules, ignoreId);
+  const teacherLunchConflict = getTeacherLunchConflict(newSchedule, items, ignoreId);
   if (teacherLunchConflict) conflicts.push(teacherLunchConflict);
   const newIsClassLike = isClassLikeSchedule(newSchedule);
-  allScheduleItems().forEach(existing => {
-    if (existing.id === ignoreId || existing.day !== newSchedule.day) return;
+  for (const existing of items) {
+    if (existing.id === ignoreId || existing.day !== newSchedule.day) continue;
     if (newSchedule.fixedActivityId && existing.fixedActivityId && newSchedule.fixedActivityId === existing.fixedActivityId) {
-      if (isFixedSubjectSchedule(newSchedule) && isFixedSubjectSchedule(existing)) return;
-      if (isBatchSubjectSchedule(newSchedule) && isBatchSubjectSchedule(existing) && (newSchedule.category === 'batchSubjectSection' || existing.category === 'batchSubjectSection')) return;
+      if (isFixedSubjectSchedule(newSchedule) && isFixedSubjectSchedule(existing)) continue;
+      if (isBatchSubjectSchedule(newSchedule) && isBatchSubjectSchedule(existing) && (newSchedule.category === 'batchSubjectSection' || existing.category === 'batchSubjectSection')) continue;
     }
-    if (!overlaps(newSchedule.start, newSchedule.duration, existing.start, existing.duration)) return;
+    if (!overlaps(newSchedule.start, newSchedule.duration, existing.start, existing.duration)) continue;
     const existingIsClassLike = isClassLikeSchedule(existing);
     if (existing.sectionId && newSchedule.sectionId && existing.sectionId === newSchedule.sectionId) conflicts.push(`Section conflict with ${conflictLabel(existing)} at ${timeRange(existing.start, existing.duration)}.`);
     if (newIsClassLike && existingIsClassLike && existing.teacherId && newSchedule.teacherId && existing.teacherId === newSchedule.teacherId) conflicts.push(`Teacher conflict with ${existing.sectionId ? byName(schedulerData.sections, existing.sectionId) : conflictLabel(existing)} at ${timeRange(existing.start, existing.duration)}.`);
     if (newIsClassLike && existingIsClassLike && !isDefaultRoom(newSchedule.roomId) && !isDefaultRoom(existing.roomId) && existing.roomId === newSchedule.roomId) conflicts.push(`Room conflict with ${existing.sectionId ? byName(schedulerData.sections, existing.sectionId) : conflictLabel(existing)} at ${timeRange(existing.start, existing.duration)}.`);
-  });
+  }
   return conflicts;
 }
 
@@ -723,12 +726,12 @@ function getCandidateStartsForDrop(day, schedule) {
     .filter(start => toMinutes(start) + Number(schedule.duration || 0) <= toMinutes(getDayEnd(day)))
     .filter((start, index, list) => list.indexOf(start) === index);
 }
-function isDropSlotAvailable(schedule, slot) {
+function isDropSlotAvailable(schedule, slot, comparisonItems = null) {
   if (!schedule || !slot?.dataset?.day || !slot.dataset.start) return false;
   const candidate = { ...schedule, day: slot.dataset.day, start: slot.dataset.start };
-  return getConflicts(candidate, schedule.id).length === 0;
+  return getConflicts(candidate, schedule.id, comparisonItems).length === 0;
 }
-function createDropSlot(dayColumn, day, start, schedule, range) {
+function createDropSlot(dayColumn, day, start, schedule, range, comparisonItems = null) {
   const slot = document.createElement('div');
   slot.className = 'drop-slot';
   slot.dataset.day = day;
@@ -736,7 +739,7 @@ function createDropSlot(dayColumn, day, start, schedule, range) {
   slot.style.top = `${timelineTop(start, range)}px`;
   slot.style.height = `${timelineHeight(schedule.duration)}px`;
   const isOriginal = day === schedule.day && start === schedule.start;
-  if (isDropSlotAvailable(schedule, slot)) {
+  if (isDropSlotAvailable(schedule, slot, comparisonItems)) {
     slot.classList.add('available-drop');
     if (isOriginal) slot.classList.add('original-drop');
     slot.dataset.dropStatus = isOriginal ? 'Current slot' : 'Available';
@@ -757,15 +760,18 @@ function markAvailableDropSlots(scheduleId) {
   document.body.classList.add('drag-preview-active');
   const schedules = filteredSchedules();
   const range = getTimelineRange(schedules);
+  const comparisonItems = allScheduleItems();
   let availableCount = 0;
+  let candidateCount = 0;
   document.querySelectorAll('.day-column[data-day]').forEach(dayColumn => {
     const day = dayColumn.dataset.day;
     getCandidateStartsForDrop(day, schedule).forEach(start => {
-      const slot = createDropSlot(dayColumn, day, start, schedule, range);
+      candidateCount += 1;
+      const slot = createDropSlot(dayColumn, day, start, schedule, range, comparisonItems);
       if (slot.classList.contains('available-drop')) availableCount += 1;
     });
   });
-  showStatus(`${availableCount} available drop slot${availableCount === 1 ? '' : 's'} highlighted. Unavailable candidate slots are muted.`);
+  showStatus(`${availableCount} available drop slot${availableCount === 1 ? '' : 's'} highlighted out of ${candidateCount} candidate slots. Unavailable slots are muted.`);
 }
 
 function setEditingMode(value) {
@@ -779,7 +785,7 @@ function setEditingMode(value) {
 function showStatus(message) { els.statusLine.textContent = message; els.statusLine.className = 'good'; clearTimeout(showStatus.timer); showStatus.timer = setTimeout(() => { els.statusLine.innerHTML = `Generated: <span id="generatedAt">${new Date().toLocaleString()}</span>`; els.generatedAt = document.getElementById('generatedAt'); els.statusLine.className = ''; }, 4500); }
 function showModal(message) { els.modalMessage.textContent = message; els.messageModal.classList.remove('hidden'); document.body.classList.add('modal-open'); setTimeout(() => els.modalOkBtn.focus(), 0); }
 function closeModal() { els.messageModal.classList.add('hidden'); document.body.classList.remove('modal-open'); }
-function moveSchedule(scheduleId, targetDay, targetStart) { const schedule = schedulerData.schedules.find(item => item.id === scheduleId); if (!schedule) { showModal('Fixed activities are protected and cannot be moved. Edit them from the main scheduler if needed.'); renderCalendar(); return; } const candidate = { ...schedule, day: targetDay, start: targetStart }; const conflicts = getConflicts(candidate, schedule.id); if (conflicts.length) { showModal(conflicts.join('\n')); renderCalendar(); return; } schedule.day = targetDay; schedule.start = targetStart; saveData(); renderCalendar(); showStatus(`Schedule moved to ${targetDay} at ${formatTime(targetStart)}. Changes saved offline.`); }
+function moveSchedule(scheduleId, targetDay, targetStart) { const schedule = schedulerData.schedules.find(item => item.id === scheduleId); if (!schedule) { showModal('Fixed activities are protected and cannot be moved. Edit them from the main scheduler if needed.'); renderCalendar(); return; } const candidate = { ...schedule, day: targetDay, start: targetStart }; const conflicts = getConflicts(candidate, schedule.id, allScheduleItems()); if (conflicts.length) { showModal(conflicts.join('\n')); renderCalendar(); return; } schedule.day = targetDay; schedule.start = targetStart; saveData(); renderCalendar(); showStatus(`Schedule moved to ${targetDay} at ${formatTime(targetStart)}. Changes saved offline.`); }
 
 function removeDragGhost() {
   if (pointerDragState?.ghost) pointerDragState.ghost.remove();

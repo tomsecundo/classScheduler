@@ -93,6 +93,16 @@ th { color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; fon
 
 /* Main workflow action buttons are intentionally on a second row so they never collide with the right control panel. */
 .workflow-panel { overflow: hidden; }
+
+.generation-progress { grid-column: 1 / -1; border: 1px solid #cfe0ff; background: linear-gradient(135deg, #f7faff, #eef5ff); border-radius: 16px; padding: 12px 14px; margin-top: 4px; }
+.generation-progress-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 8px; }
+.generation-progress-head strong { font-size: 0.92rem; }
+.generation-progress-head span { color: var(--primary-dark); font-weight: 900; font-size: 0.84rem; white-space: nowrap; }
+.generation-progress-track { height: 10px; background: #dbe7ff; border-radius: 999px; overflow: hidden; }
+.generation-progress-bar { width: 0%; height: 100%; background: linear-gradient(90deg, var(--primary), #13a36f); border-radius: inherit; transition: width 0.18s ease; }
+.generation-progress p { margin: 8px 0 0; color: var(--muted); font-size: 0.86rem; line-height: 1.35; }
+.generation-progress.done { border-color: #bfead6; background: linear-gradient(135deg, #f3fff8, #ecfff4); }
+.generation-progress.warning { border-color: #ffe0a8; background: linear-gradient(135deg, #fffaf0, #fff4dc); }
 .compact-workflow-grid > label { min-width: 0; }
 .compact-workflow-grid > label select,
 .compact-workflow-grid > label input { min-width: 0; }
@@ -182,13 +192,14 @@ th { color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; fon
 @media (max-width: 420px) { .sync-actions { grid-template-columns: 1fr; } }
 
 .fixed-card { max-height: 430px; }
-.preset-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.preset-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .days-row { display: flex; gap: 6px; flex-wrap: wrap; }
 .field-label { margin: 0 0 6px; color: var(--muted); font-weight: 800; font-size: 0.78rem; }
 .mini-check { font-size: 0.78rem; font-weight: 800; padding: 6px 8px; border: 1px solid var(--line); border-radius: 10px; background: #fbfcff; }
 .section-checkbox-list { max-height: 130px; overflow-y: auto; display: grid; gap: 6px; padding: 6px; border: 1px solid var(--line); border-radius: 12px; background: #fbfcff; }
 .fixed-row td { background: #fffdf5; }
 .fixed-badge { display: inline-flex; align-items: center; width: fit-content; padding: 4px 7px; border-radius: 999px; background: #fff4d6; color: var(--warning); font-size: 0.72rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.03em; }
+@media (max-width: 760px) { .preset-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 420px) { .preset-actions { grid-template-columns: 1fr; } }
 
 
