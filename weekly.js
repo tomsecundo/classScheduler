@@ -70,7 +70,7 @@ function ensureSwapUi() {
         <div class="modal-icon">⇄</div>
         <p class="eyebrow modal-label">Swap Class</p>
         <h2 id="swapModalTitle">Compatible Swap Options</h2>
-        <p id="swapModalMessage" class="modal-message">Select one class below to exchange time slots with the selected class.</p>
+        <p id="swapModalMessage" class="modal-message">Select one class from the same section below to exchange time slots with the selected class.</p>
         <div id="swapSelectedCard" class="swap-selected-card"></div>
         <div id="swapCandidateList" class="swap-list"></div>
         <p class="swap-mode-note">Only conflict-free swaps are shown. The system checks section, teacher, room, fixed slots, official start time, lunch rules, and school day limits before swapping.</p>
@@ -1054,6 +1054,7 @@ function renderSwapSummary(item, mode = 'card') {
 function getSwapConflicts(first, second) {
   if (!first || !second || first.id === second.id) return ['Invalid swap selection.'];
   if (isFixedSchedule(first) || isFixedSchedule(second)) return ['Fixed/protected activities cannot be swapped.'];
+  if (!first.sectionId || !second.sectionId || first.sectionId !== second.sectionId) return ['Classes can only be swapped within the same section.'];
   const base = allScheduleItems().filter(item => item.id !== first.id && item.id !== second.id);
   const firstCandidate = { ...first, day: second.day, start: second.start };
   const secondCandidate = { ...second, day: first.day, start: first.start };
@@ -1064,6 +1065,7 @@ function getSwapConflicts(first, second) {
 function getSwappableCandidates(schedule) {
   return movableScheduleItems()
     .filter(candidate => candidate.id !== schedule.id)
+    .filter(candidate => candidate.sectionId && schedule.sectionId && candidate.sectionId === schedule.sectionId)
     .map(candidate => ({ candidate, conflicts: getSwapConflicts(schedule, candidate) }))
     .filter(result => result.conflicts.length === 0)
     .sort((a, b) => DAYS.indexOf(a.candidate.day) - DAYS.indexOf(b.candidate.day)
@@ -1077,10 +1079,11 @@ async function openSwapModal(scheduleId) {
   if (!schedule || isFixedSchedule(schedule)) return showModal('Select a movable class block. Fixed/protected activities cannot be swapped.');
   swapSelectedScheduleId = scheduleId;
   const options = getSwappableCandidates(schedule);
+  if (els.swapModalMessage) els.swapModalMessage.textContent = 'Select one class from the same section below to exchange time slots with the selected class.';
   els.swapSelectedCard.innerHTML = renderSwapSummary(schedule);
   els.swapCandidateList.innerHTML = options.length
     ? options.map(({ candidate }) => `<button type="button" class="swap-candidate" data-swap-target-id="${escapeHtml(candidate.id)}">${renderSwapSummary(candidate, 'button')}</button>`).join('')
-    : '<div class="swap-empty">No conflict-free swap options found for this class. Try moving it manually, reshuffling, or adjusting teacher/room constraints.</div>';
+    : '<div class="swap-empty">No conflict-free same-section swap options found for this class. Try moving it manually, reshuffling, or adjusting teacher/room constraints.</div>';
   els.swapModal.classList.remove('hidden');
   document.body.classList.add('modal-open');
   setTimeout(() => els.swapCandidateList.querySelector('button')?.focus(), 0);
