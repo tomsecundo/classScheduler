@@ -18,12 +18,75 @@ let currentEntity = null;
 let browserMode = null;
 let activeDragScheduleId = null;
 let pointerDragState = null;
+let swapMode = false;
+let swapSelectedScheduleId = null;
+let suppressSwapClick = false;
 
 const els = {
   viewEyebrow: document.getElementById('viewEyebrow'), viewTitle: document.getElementById('viewTitle'), viewSubtitle: document.getElementById('viewSubtitle'), printBtn: document.getElementById('printBtn'), closeBtn: document.getElementById('closeBtn'), refreshBtn: document.getElementById('refreshBtn'), editToggle: document.getElementById('editToggle'),
   totalClasses: document.getElementById('totalClasses'), totalMinutes: document.getElementById('totalMinutes'), dailySummary: document.getElementById('dailySummary'), generatedAt: document.getElementById('generatedAt'), calendarBody: document.getElementById('calendarBody'), statusLine: document.getElementById('statusLine'), navigatorCard: document.getElementById('navigatorCard'), navigatorSelect: document.getElementById('navigatorSelect'), navigatorLabel: document.getElementById('navigatorLabel'), navigatorHint: document.getElementById('navigatorHint'), exportAllTeacherXlsxBtn: document.getElementById('exportAllTeacherXlsxBtn'), exportIcsBtn: document.getElementById('exportIcsBtn'),
   messageModal: document.getElementById('messageModal'), modalMessage: document.getElementById('modalMessage'), modalOkBtn: document.getElementById('modalOkBtn'), modalCloseBtn: document.getElementById('modalCloseBtn')
 };
+
+function injectSwapStyles() {
+  if (document.getElementById('swapFeatureStyles')) return;
+  const style = document.createElement('style');
+  style.id = 'swapFeatureStyles';
+  style.textContent = `
+    body.swap-mode-active .class-block.event-block:not(.fixed-block) { cursor: pointer; outline: 2px dashed rgba(37, 99, 235, .45); outline-offset: 2px; }
+    .swap-modal-panel { max-width: min(920px, calc(100vw - 32px)); }
+    .swap-selected-card { background: #eef4ff; border: 1px solid #c7d8ff; border-radius: 16px; padding: 14px 16px; margin: 12px 0 16px; color: #1f2937; }
+    .swap-list { display: grid; gap: 10px; max-height: min(52vh, 520px); overflow: auto; padding-right: 4px; }
+    .swap-candidate { width: 100%; text-align: left; border: 1px solid #d8e1ef; border-radius: 14px; background: #fff; padding: 12px 14px; color: #1f2937; cursor: pointer; }
+    .swap-candidate:hover, .swap-candidate:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, .12); outline: none; }
+    .swap-candidate strong { display: block; font-size: 14px; margin-bottom: 4px; }
+    .swap-candidate span { display: block; color: #5b677a; font-size: 13px; line-height: 1.35; }
+    .swap-empty { padding: 18px; border: 1px dashed #cbd5e1; border-radius: 14px; color: #5b677a; background: #f8fafc; }
+    .swap-mode-note { margin: 8px 0 0; color: #5b677a; font-size: 13px; }
+  `;
+  document.head.appendChild(style);
+}
+
+function ensureSwapUi() {
+  injectSwapStyles();
+  if (!document.getElementById('swapToggle')) {
+    const button = document.createElement('button');
+    button.id = 'swapToggle';
+    button.className = 'secondary';
+    button.type = 'button';
+    button.textContent = 'Swap Mode: Off';
+    els.editToggle?.insertAdjacentElement('afterend', button);
+  }
+  if (!document.getElementById('swapModal')) {
+    const modal = document.createElement('div');
+    modal.id = 'swapModal';
+    modal.className = 'modal hidden';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-swap-close></div>
+      <div class="modal-panel swap-modal-panel" role="document">
+        <button type="button" id="swapModalCloseBtn" class="modal-close" aria-label="Close swap dialog">&times;</button>
+        <div class="modal-icon">⇄</div>
+        <p class="eyebrow modal-label">Swap Class</p>
+        <h2 id="swapModalTitle">Compatible Swap Options</h2>
+        <p id="swapModalMessage" class="modal-message">Select one class below to exchange time slots with the selected class.</p>
+        <div id="swapSelectedCard" class="swap-selected-card"></div>
+        <div id="swapCandidateList" class="swap-list"></div>
+        <p class="swap-mode-note">Only conflict-free swaps are shown. The system checks section, teacher, room, fixed slots, official start time, lunch rules, and school day limits before swapping.</p>
+        <div class="modal-actions">
+          <button type="button" id="swapCancelBtn" class="secondary">Cancel</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+  els.swapToggle = document.getElementById('swapToggle');
+  els.swapModal = document.getElementById('swapModal');
+  els.swapSelectedCard = document.getElementById('swapSelectedCard');
+  els.swapCandidateList = document.getElementById('swapCandidateList');
+  els.swapCancelBtn = document.getElementById('swapCancelBtn');
+  els.swapModalCloseBtn = document.getElementById('swapModalCloseBtn');
+}
 
 function getDefaultDayStarts(start = defaultData.settings.dayStart) {
   const starts = DAYS.reduce((map, day) => ({ ...map, [day]: start }), {});
@@ -144,6 +207,112 @@ async function pushToServer({ silent = false } = {}) {
     return false;
   }
 }
+async function pushDataToServerSnapshot(snapshotData) {
+  if (!syncConfig.enabled) return { ok: true, revision: remoteRevision };
+  try {
+    const result = await apiRequest('/api/scheduler', {
+      method: 'PUT',
+      body: JSON.stringify({ data: normalizeData(snapshotData), expectedRevision: remoteRevision })
+    });
+    remoteRevision = Number(result.revision || 0);
+    localStorage.setItem(API_REVISION_KEY, String(remoteRevision));
+    return { ok: true, revision: remoteRevision };
+  } catch (error) {
+    if (error.status === 409 && error.body?.data) {
+      return {
+        ok: false,
+        conflict: true,
+        data: normalizeData(error.body.data),
+        revision: Number(error.body.revision || remoteRevision || 0)
+      };
+    }
+    return { ok: false, conflict: false, error };
+  }
+}
+
+async function saveMoveToServerWithRetry(scheduleId, targetDay, targetStart) {
+  if (!syncConfig.enabled) return true;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const result = await pushDataToServerSnapshot(schedulerData);
+    if (result.ok) return true;
+    if (!result.conflict) {
+      showModal(result.error?.message || 'Could not save the move to the MongoDB API server.');
+      return false;
+    }
+
+    schedulerData = result.data;
+    remoteRevision = Number(result.revision || remoteRevision || 0);
+    localStorage.setItem(API_REVISION_KEY, String(remoteRevision));
+
+    const latestSchedule = schedulerData.schedules.find(item => item.id === scheduleId);
+    if (!latestSchedule) {
+      saveData({ localOnly: true });
+      renderCalendar();
+      showModal('This class was changed or deleted on the latest server copy. Refresh this weekly view and try again.');
+      return false;
+    }
+
+    const candidate = { ...latestSchedule, day: targetDay, start: targetStart };
+    const conflicts = getConflicts(candidate, latestSchedule.id, allScheduleItems());
+    if (conflicts.length) {
+      saveData({ localOnly: true });
+      renderCalendar();
+      showModal(conflicts.join('\n'));
+      return false;
+    }
+
+    latestSchedule.day = targetDay;
+    latestSchedule.start = targetStart;
+    saveData({ localOnly: true });
+  }
+  renderCalendar();
+  showModal('The schedule changed while saving. Please apply the move again.');
+  return false;
+}
+
+async function saveSwapToServerWithRetry(firstId, secondId) {
+  if (!syncConfig.enabled) return true;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const result = await pushDataToServerSnapshot(schedulerData);
+    if (result.ok) return true;
+    if (!result.conflict) {
+      showModal(result.error?.message || 'Could not save the swap to the MongoDB API server.');
+      return false;
+    }
+
+    schedulerData = result.data;
+    remoteRevision = Number(result.revision || remoteRevision || 0);
+    localStorage.setItem(API_REVISION_KEY, String(remoteRevision));
+
+    const first = getScheduleById(firstId);
+    const second = getScheduleById(secondId);
+    if (!first || !second) {
+      saveData({ localOnly: true });
+      renderCalendar();
+      showModal('One of the selected classes was changed or deleted on the latest server copy. Refresh this weekly view and try again.');
+      return false;
+    }
+
+    const conflicts = getSwapConflicts(first, second);
+    if (conflicts.length) {
+      saveData({ localOnly: true });
+      renderCalendar();
+      showModal(conflicts.join('\n'));
+      return false;
+    }
+
+    const firstDay = first.day;
+    const firstStart = first.start;
+    first.day = second.day;
+    first.start = second.start;
+    second.day = firstDay;
+    second.start = firstStart;
+    saveData({ localOnly: true });
+  }
+  renderCalendar();
+  showModal('The schedule changed while saving. Please apply the swap again.');
+  return false;
+}
 function escapeHtml(value) { return String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;'); }
 function toMinutes(time) { const [h,m] = String(time || '00:00').split(':').map(Number); return h * 60 + m; }
 function fromMinutes(total) { const h = Math.floor(total / 60) % 24; const m = total % 60; return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`; }
@@ -224,34 +393,51 @@ function teacherHasOpenWindowOnDay(teacherId, day, startMinute, duration, schedu
   return !teacherBusySlotsForDay(teacherId, day, schedules, candidate, ignoreId, source)
     .some(slot => startMinute < slot.end && slot.start < endMinute);
 }
-function hasTeacherLunchWindow(schedule, schedules = getDisplayScheduleItems(), ignoreId = null, source = schedulerData) {
-  if (!schedule || isNonTeachingFixedSchedule(schedule) || !schedule.teacherId || !schedule.day) return true;
+function hasTeacherLunchWindowFor(teacherId, day, schedules = allScheduleItems(), candidate = null, ignoreId = null, source = schedulerData) {
+  if (!teacherId || !day) return true;
   const window = getTeacherLunchWindow(source);
   const windowStart = toMinutes(window.start);
   const windowEnd = toMinutes(window.end);
   const needed = Math.max(1, Number(window.duration || 50));
   if (windowEnd <= windowStart || needed > (windowEnd - windowStart)) return true;
+
   const commonLunchDays = ['Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-  if (commonLunchDays.includes(schedule.day)) {
+  if (commonLunchDays.includes(day)) {
     for (let start = windowStart; start + needed <= windowEnd; start += 5) {
-      const isCommonFree = commonLunchDays.every(day => teacherHasOpenWindowOnDay(schedule.teacherId, day, start, needed, schedules, schedule, ignoreId, source));
+      const isCommonFree = commonLunchDays.every(commonDay =>
+        teacherHasOpenWindowOnDay(teacherId, commonDay, start, needed, schedules, candidate, ignoreId, source)
+      );
       if (isCommonFree) return true;
     }
     return false;
   }
+
   for (let start = windowStart; start + needed <= windowEnd; start += 5) {
-    if (teacherHasOpenWindowOnDay(schedule.teacherId, schedule.day, start, needed, schedules, schedule, ignoreId, source)) return true;
+    if (teacherHasOpenWindowOnDay(teacherId, day, start, needed, schedules, candidate, ignoreId, source)) return true;
   }
   return false;
 }
-function getTeacherLunchConflict(schedule, schedules = getDisplayScheduleItems(), ignoreId = null, source = schedulerData) {
+function hasTeacherLunchWindow(schedule, schedules = allScheduleItems(), ignoreId = null, source = schedulerData) {
+  if (!schedule || isNonTeachingFixedSchedule(schedule) || !schedule.teacherId || !schedule.day) return true;
+  return hasTeacherLunchWindowFor(schedule.teacherId, schedule.day, schedules, schedule, ignoreId, source);
+}
+function hasTeacherLunchWindowBeforeCandidate(schedule, schedules = allScheduleItems(), ignoreId = null, source = schedulerData) {
+  if (!schedule || isNonTeachingFixedSchedule(schedule) || !schedule.teacherId || !schedule.day) return true;
+  return hasTeacherLunchWindowFor(schedule.teacherId, schedule.day, schedules, null, ignoreId, source);
+}
+function getTeacherLunchConflict(schedule, schedules = allScheduleItems(), ignoreId = null, source = schedulerData) {
   if (!schedule || isNonTeachingFixedSchedule(schedule) || !schedule.teacherId) return '';
   const teacher = (source.teachers || []).find(item => item.id === schedule.teacherId || item.name === schedule.teacherId);
   if (!teacher) return '';
-  if (hasTeacherLunchWindow(schedule, schedules, ignoreId, source)) return '';
+  const afterHasLunch = hasTeacherLunchWindow(schedule, schedules, ignoreId, source);
+  if (afterHasLunch) return '';
+  const beforeHasLunch = hasTeacherLunchWindowBeforeCandidate(schedule, schedules, ignoreId, source);
+  if (!beforeHasLunch) return '';
   const window = getTeacherLunchWindow(source);
   const commonLunchDays = ['Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-  if (commonLunchDays.includes(schedule.day)) return `${teacher.name} needs the same ${window.duration}-minute lunch window from Tuesday to Friday between ${formatTime(window.start)} and ${formatTime(window.end)}. This assignment would remove every common lunch window.`;
+  if (commonLunchDays.includes(schedule.day)) {
+    return `${teacher.name} needs the same ${window.duration}-minute lunch window from Tuesday to Friday between ${formatTime(window.start)} and ${formatTime(window.end)}. This assignment would remove every common lunch window.`;
+  }
   return `${teacher.name} needs at least ${window.duration} minutes for lunch between ${formatTime(window.start)} and ${formatTime(window.end)}. This assignment would remove all available lunch windows for the day.`;
 }
 function getDayWindowConflict(schedule, source = schedulerData) {
@@ -802,7 +988,132 @@ function setEditingMode(value) {
 function showStatus(message) { els.statusLine.textContent = message; els.statusLine.className = 'good'; clearTimeout(showStatus.timer); showStatus.timer = setTimeout(() => { els.statusLine.innerHTML = `Generated: <span id="generatedAt">${new Date().toLocaleString()}</span>`; els.generatedAt = document.getElementById('generatedAt'); els.statusLine.className = ''; }, 4500); }
 function showModal(message) { els.modalMessage.textContent = message; els.messageModal.classList.remove('hidden'); document.body.classList.add('modal-open'); setTimeout(() => els.modalOkBtn.focus(), 0); }
 function closeModal() { els.messageModal.classList.add('hidden'); document.body.classList.remove('modal-open'); }
-function moveSchedule(scheduleId, targetDay, targetStart) { const schedule = schedulerData.schedules.find(item => item.id === scheduleId); if (!schedule) { showModal('Fixed activities are protected and cannot be moved. Edit them from the main scheduler if needed.'); renderCalendar(); return; } const candidate = { ...schedule, day: targetDay, start: targetStart }; const conflicts = getConflicts(candidate, schedule.id, allScheduleItems()); if (conflicts.length) { showModal(conflicts.join('\n')); renderCalendar(); return; } schedule.day = targetDay; schedule.start = targetStart; saveData(); renderCalendar(); showStatus(`Schedule moved to ${targetDay} at ${formatTime(targetStart)}. Changes saved offline.`); }
+async function moveSchedule(scheduleId, targetDay, targetStart) {
+  if (syncConfig.enabled) await pullFromServer({ silent: true });
+  const schedule = schedulerData.schedules.find(item => item.id === scheduleId);
+  if (!schedule) {
+    showModal('This class was not found in the latest schedule data. Refresh this weekly view and try again.');
+    renderCalendar();
+    return;
+  }
+  const candidate = { ...schedule, day: targetDay, start: targetStart };
+  const conflicts = getConflicts(candidate, schedule.id, allScheduleItems());
+  if (conflicts.length) {
+    showModal(conflicts.join('\n'));
+    renderCalendar();
+    return;
+  }
+  schedule.day = targetDay;
+  schedule.start = targetStart;
+  saveData({ localOnly: true });
+  renderCalendar();
+  showStatus(`Schedule moved to ${targetDay} at ${formatTime(targetStart)}. Saving change...`);
+  if (syncConfig.enabled) {
+    const saved = await saveMoveToServerWithRetry(scheduleId, targetDay, targetStart);
+    renderCalendar();
+    if (saved) showStatus(`Schedule moved to ${targetDay} at ${formatTime(targetStart)}. Changes saved to server.`);
+  } else {
+    showStatus(`Schedule moved to ${targetDay} at ${formatTime(targetStart)}. Changes saved offline.`);
+  }
+}
+
+function setSwapMode(value) {
+  swapMode = Boolean(value);
+  document.body.classList.toggle('swap-mode-active', swapMode);
+  if (els.swapToggle) {
+    els.swapToggle.textContent = swapMode ? 'Swap Mode: On' : 'Swap Mode: Off';
+    els.swapToggle.className = swapMode ? 'danger' : 'secondary';
+  }
+  if (swapMode) showStatus('Swap Mode is on. Click a movable class block to view compatible swap options.');
+  else showStatus('Swap Mode is off.');
+}
+function closeSwapModal() {
+  if (els.swapModal) els.swapModal.classList.add('hidden');
+  document.body.classList.remove('modal-open');
+  swapSelectedScheduleId = null;
+}
+function movableScheduleItems() {
+  return (schedulerData.schedules || []).filter(item => item && item.id && !isFixedSchedule(item) && isClassLikeSchedule(item));
+}
+function scheduleSummaryText(item) {
+  const subject = isFixedTeachingSchedule(item) ? fixedDisplayTitle(item) : byName(schedulerData.subjects, item.subjectId);
+  const section = byName(schedulerData.sections, item.sectionId);
+  const teacher = isNoTeacherId(item.teacherId) ? '' : teacherName(item.teacherId);
+  const room = byName(schedulerData.rooms, item.roomId);
+  return { subject, section, teacher, room, time: `${item.day}, ${timeRange(item.start, item.duration)}` };
+}
+function renderSwapSummary(item, mode = 'card') {
+  const summary = scheduleSummaryText(item);
+  const teacherLine = summary.teacher ? `<span>Teacher: ${escapeHtml(summary.teacher)}</span>` : '';
+  const roomLine = summary.room ? `<span>Room: ${escapeHtml(summary.room)}</span>` : '';
+  if (mode === 'button') {
+    return `<strong>${escapeHtml(summary.subject)} — ${escapeHtml(summary.section)}</strong><span>${escapeHtml(summary.time)}</span>${teacherLine}${roomLine}`;
+  }
+  return `<strong>${escapeHtml(summary.subject)} — ${escapeHtml(summary.section)}</strong>${teacherLine}<span>${escapeHtml(summary.time)}</span>${roomLine}`;
+}
+function getSwapConflicts(first, second) {
+  if (!first || !second || first.id === second.id) return ['Invalid swap selection.'];
+  if (isFixedSchedule(first) || isFixedSchedule(second)) return ['Fixed/protected activities cannot be swapped.'];
+  const base = allScheduleItems().filter(item => item.id !== first.id && item.id !== second.id);
+  const firstCandidate = { ...first, day: second.day, start: second.start };
+  const secondCandidate = { ...second, day: first.day, start: first.start };
+  const firstConflicts = getConflicts(firstCandidate, null, base).map(conflict => `${scheduleSummaryText(first).subject}: ${conflict}`);
+  const secondConflicts = getConflicts(secondCandidate, null, [...base, firstCandidate]).map(conflict => `${scheduleSummaryText(second).subject}: ${conflict}`);
+  return Array.from(new Set([...firstConflicts, ...secondConflicts]));
+}
+function getSwappableCandidates(schedule) {
+  return movableScheduleItems()
+    .filter(candidate => candidate.id !== schedule.id)
+    .map(candidate => ({ candidate, conflicts: getSwapConflicts(schedule, candidate) }))
+    .filter(result => result.conflicts.length === 0)
+    .sort((a, b) => DAYS.indexOf(a.candidate.day) - DAYS.indexOf(b.candidate.day)
+      || toMinutes(a.candidate.start) - toMinutes(b.candidate.start)
+      || scheduleSummaryText(a.candidate).section.localeCompare(scheduleSummaryText(b.candidate).section)
+      || scheduleSummaryText(a.candidate).subject.localeCompare(scheduleSummaryText(b.candidate).subject));
+}
+async function openSwapModal(scheduleId) {
+  if (syncConfig.enabled) await pullFromServer({ silent: true });
+  const schedule = getScheduleById(scheduleId);
+  if (!schedule || isFixedSchedule(schedule)) return showModal('Select a movable class block. Fixed/protected activities cannot be swapped.');
+  swapSelectedScheduleId = scheduleId;
+  const options = getSwappableCandidates(schedule);
+  els.swapSelectedCard.innerHTML = renderSwapSummary(schedule);
+  els.swapCandidateList.innerHTML = options.length
+    ? options.map(({ candidate }) => `<button type="button" class="swap-candidate" data-swap-target-id="${escapeHtml(candidate.id)}">${renderSwapSummary(candidate, 'button')}</button>`).join('')
+    : '<div class="swap-empty">No conflict-free swap options found for this class. Try moving it manually, reshuffling, or adjusting teacher/room constraints.</div>';
+  els.swapModal.classList.remove('hidden');
+  document.body.classList.add('modal-open');
+  setTimeout(() => els.swapCandidateList.querySelector('button')?.focus(), 0);
+}
+async function performScheduleSwap(firstId, secondId) {
+  if (syncConfig.enabled) await pullFromServer({ silent: true });
+  const first = getScheduleById(firstId);
+  const second = getScheduleById(secondId);
+  if (!first || !second) {
+    closeSwapModal();
+    renderCalendar();
+    return showModal('One of the selected classes was changed or deleted. Refresh the weekly view and try again.');
+  }
+  const conflicts = getSwapConflicts(first, second);
+  if (conflicts.length) return showModal(conflicts.join('\n'));
+  const firstDay = first.day;
+  const firstStart = first.start;
+  first.day = second.day;
+  first.start = second.start;
+  second.day = firstDay;
+  second.start = firstStart;
+  closeSwapModal();
+  saveData({ localOnly: true });
+  renderCalendar();
+  showStatus('Classes swapped. Saving change...');
+  if (syncConfig.enabled) {
+    const saved = await saveSwapToServerWithRetry(firstId, secondId);
+    renderCalendar();
+    if (saved) showStatus('Classes swapped and saved to server.');
+  } else {
+    showStatus('Classes swapped and saved offline.');
+  }
+}
 
 function removeDragGhost() {
   if (pointerDragState?.ghost) pointerDragState.ghost.remove();
@@ -887,6 +1198,8 @@ function handlePointerUp(event) {
   removeDragGhost();
   clearDropAvailabilityHighlights();
   pointerDragState = null;
+  suppressSwapClick = true;
+  setTimeout(() => { suppressSwapClick = false; }, 0);
   if (!canDrop) {
     showModal('This slot is unavailable for the selected class. Drop only on highlighted available slots.');
     return;
@@ -917,7 +1230,28 @@ async function initializeView() {
   renderCalendar();
 }
 
+ensureSwapUi();
 els.editToggle.addEventListener('click', () => setEditingMode(!editing));
+if (els.swapToggle) els.swapToggle.addEventListener('click', () => setSwapMode(!swapMode));
+els.calendarBody.addEventListener('click', event => {
+  if (!swapMode || suppressSwapClick) return;
+  const block = event.target.closest('.class-block.event-block');
+  if (!block || block.classList.contains('fixed-block')) return;
+  const scheduleId = block.dataset.scheduleId;
+  if (!scheduleId) return;
+  event.preventDefault();
+  event.stopPropagation();
+  openSwapModal(scheduleId);
+});
+if (els.swapModal) {
+  els.swapModal.addEventListener('click', event => {
+    if (event.target.matches('[data-swap-close]')) closeSwapModal();
+    const target = event.target.closest('[data-swap-target-id]');
+    if (target && swapSelectedScheduleId) performScheduleSwap(swapSelectedScheduleId, target.dataset.swapTargetId);
+  });
+}
+if (els.swapCancelBtn) els.swapCancelBtn.addEventListener('click', closeSwapModal);
+if (els.swapModalCloseBtn) els.swapModalCloseBtn.addEventListener('click', closeSwapModal);
 els.printBtn.addEventListener('click', () => window.print());
 if (els.exportIcsBtn) els.exportIcsBtn.addEventListener('click', exportCurrentIcs);
 if (els.exportAllTeacherXlsxBtn) els.exportAllTeacherXlsxBtn.addEventListener('click', exportAllTeacherXlsxFromBrowser);
@@ -968,6 +1302,6 @@ els.calendarBody.addEventListener('drop', event => {
   }
   if (scheduleId) moveSchedule(scheduleId, cell.dataset.day, cell.dataset.start);
 });
-els.modalOkBtn.addEventListener('click', closeModal); els.modalCloseBtn.addEventListener('click', closeModal); els.messageModal.addEventListener('click', event => { if (event.target.matches('[data-modal-close]')) closeModal(); }); document.addEventListener('keydown', event => { if (event.key === 'Escape') closeModal(); });
+els.modalOkBtn.addEventListener('click', closeModal); els.modalCloseBtn.addEventListener('click', closeModal); els.messageModal.addEventListener('click', event => { if (event.target.matches('[data-modal-close]')) closeModal(); }); document.addEventListener('keydown', event => { if (event.key === 'Escape') { closeModal(); closeSwapModal(); } });
 window.addEventListener('storage', event => { if (event.key === STORAGE_KEY) refreshFromStorage(); });
 initializeView();

@@ -9,7 +9,7 @@ const NO_TEACHER_SELECT_VALUE = '__no_teacher__';
 const NO_TEACHER_LABEL = 'No Teacher (NT)';
 
 const defaultData = {
-  settings: { dayStart: '07:30', dayEnd: '16:30', slotDuration: 50, dayStarts: { Monday: '07:50', Tuesday: '07:30', Wednesday: '07:30', Thursday: '07:30', Friday: '07:30' } },
+  settings: { dayStart: '07:30', dayEnd: '16:30', slotDuration: 50, maxTeacherConsecutivePeriods: 3, teacherConsecutiveGapMinutes: 5, dayStarts: { Monday: '07:50', Tuesday: '07:30', Wednesday: '07:30', Thursday: '07:30', Friday: '07:30' } },
   sections: [],
   subjects: [],
   teachers: [],
@@ -347,8 +347,8 @@ function teacherHasOpenWindowOnDay(teacherId, day, startMinute, duration, schedu
   return !teacherBusySlotsForDay(teacherId, day, schedules, candidate, ignoreId, source)
     .some(slot => startMinute < slot.end && slot.start < endMinute);
 }
-function hasTeacherLunchWindow(schedule, schedules = getDisplayScheduleItems(), ignoreId = null, source = data) {
-  if (!schedule || isNonTeachingFixedSchedule(schedule) || !schedule.teacherId || !schedule.day) return true;
+function hasTeacherLunchWindowFor(teacherId, day, schedules = getDisplayScheduleItems(), candidate = null, ignoreId = null, source = data) {
+  if (!teacherId || !day) return true;
   const window = getTeacherLunchWindow(source);
   const windowStart = toMinutes(window.start);
   const windowEnd = toMinutes(window.end);
@@ -356,10 +356,10 @@ function hasTeacherLunchWindow(schedule, schedules = getDisplayScheduleItems(), 
   if (windowEnd <= windowStart || needed > (windowEnd - windowStart)) return true;
 
   const commonLunchDays = ['Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-  if (commonLunchDays.includes(schedule.day)) {
+  if (commonLunchDays.includes(day)) {
     for (let start = windowStart; start + needed <= windowEnd; start += 5) {
-      const isCommonFree = commonLunchDays.every(day =>
-        teacherHasOpenWindowOnDay(schedule.teacherId, day, start, needed, schedules, schedule, ignoreId, source)
+      const isCommonFree = commonLunchDays.every(commonDay =>
+        teacherHasOpenWindowOnDay(teacherId, commonDay, start, needed, schedules, candidate, ignoreId, source)
       );
       if (isCommonFree) return true;
     }
@@ -367,15 +367,26 @@ function hasTeacherLunchWindow(schedule, schedules = getDisplayScheduleItems(), 
   }
 
   for (let start = windowStart; start + needed <= windowEnd; start += 5) {
-    if (teacherHasOpenWindowOnDay(schedule.teacherId, schedule.day, start, needed, schedules, schedule, ignoreId, source)) return true;
+    if (teacherHasOpenWindowOnDay(teacherId, day, start, needed, schedules, candidate, ignoreId, source)) return true;
   }
   return false;
+}
+function hasTeacherLunchWindow(schedule, schedules = getDisplayScheduleItems(), ignoreId = null, source = data) {
+  if (!schedule || isNonTeachingFixedSchedule(schedule) || !schedule.teacherId || !schedule.day) return true;
+  return hasTeacherLunchWindowFor(schedule.teacherId, schedule.day, schedules, schedule, ignoreId, source);
+}
+function hasTeacherLunchWindowBeforeCandidate(schedule, schedules = getDisplayScheduleItems(), ignoreId = null, source = data) {
+  if (!schedule || isNonTeachingFixedSchedule(schedule) || !schedule.teacherId || !schedule.day) return true;
+  return hasTeacherLunchWindowFor(schedule.teacherId, schedule.day, schedules, null, ignoreId, source);
 }
 function getTeacherLunchConflict(schedule, schedules = getDisplayScheduleItems(), ignoreId = null, source = data) {
   if (!schedule || isNonTeachingFixedSchedule(schedule) || !schedule.teacherId) return '';
   const teacher = (source.teachers || []).find(item => item.id === schedule.teacherId || item.name === schedule.teacherId);
   if (!teacher) return '';
-  if (hasTeacherLunchWindow(schedule, schedules, ignoreId, source)) return '';
+  const afterHasLunch = hasTeacherLunchWindow(schedule, schedules, ignoreId, source);
+  if (afterHasLunch) return '';
+  const beforeHasLunch = hasTeacherLunchWindowBeforeCandidate(schedule, schedules, ignoreId, source);
+  if (!beforeHasLunch) return '';
   const window = getTeacherLunchWindow(source);
   const commonLunchDays = ['Tuesday', 'Wednesday', 'Thursday', 'Friday'];
   if (commonLunchDays.includes(schedule.day)) {
@@ -412,6 +423,92 @@ function getTeacherDayCount(schedules, teacherId, day) {
 }
 function getTeacherActiveDayCount(schedules, teacherId) {
   return DAYS.filter(day => getTeacherDayCount(schedules, teacherId, day) > 0).length;
+}
+
+function getPreferredMaxTeacherConsecutivePeriods(source = data) {
+  return Math.max(1, Number(source.settings?.maxTeacherConsecutivePeriods || 3));
+}
+function getTeacherConsecutiveGapMinutes(source = data) {
+  return Math.max(0, Number(source.settings?.teacherConsecutiveGapMinutes ?? 5));
+}
+function getSchedulePeriodUnits(item, source = data) {
+  const periodMinutes = Math.max(1, Number(source.settings?.slotDuration || 50));
+  return Math.max(1, Math.ceil(Number(item?.duration || periodMinutes) / periodMinutes));
+}
+function getTeacherConsecutiveStats(schedules, teacherId, day, candidate = null, ignoreId = null, source = data) {
+  if (!teacherId || !day) return { maxPeriods: 0, maxMinutes: 0, blocks: [] };
+  const candidateKey = candidate?.id || '__candidate__';
+  const gapAllowance = getTeacherConsecutiveGapMinutes(source);
+  const items = [...(schedules || []), candidate]
+    .filter(Boolean)
+    .filter(item => item.day === day && item.teacherId === teacherId)
+    .filter(item => item.id !== ignoreId)
+    .filter(item => item.id !== candidateKey || item === candidate)
+    .filter(item => isClassLikeSchedule(item))
+    .map(item => {
+      const start = toMinutes(item.start);
+      const end = start + Number(item.duration || source.settings?.slotDuration || 50);
+      return {
+        id: item.id,
+        start,
+        end,
+        periods: getSchedulePeriodUnits(item, source),
+        minutes: Math.max(0, end - start)
+      };
+    })
+    .filter(item => item.end > item.start)
+    .sort((a, b) => a.start - b.start || a.end - b.end);
+
+  const blocks = [];
+  let current = null;
+  items.forEach(item => {
+    if (!current || item.start > current.end + gapAllowance) {
+      current = { start: item.start, end: item.end, periods: item.periods, minutes: item.minutes, count: 1, ids: [item.id] };
+      blocks.push(current);
+    } else {
+      current.end = Math.max(current.end, item.end);
+      current.periods += item.periods;
+      current.minutes += item.minutes;
+      current.count += 1;
+      current.ids.push(item.id);
+    }
+  });
+  const maxBlock = blocks.reduce((best, block) => !best || block.periods > best.periods || (block.periods === best.periods && block.minutes > best.minutes) ? block : best, null);
+  return {
+    maxPeriods: maxBlock ? maxBlock.periods : 0,
+    maxMinutes: maxBlock ? maxBlock.minutes : 0,
+    longestBlock: maxBlock,
+    blocks
+  };
+}
+function getTeacherConsecutivePenaltyForCandidate(candidate, schedules, source = data) {
+  if (!candidate?.teacherId || !candidate?.day) return 0;
+  const stats = getTeacherConsecutiveStats(schedules, candidate.teacherId, candidate.day, candidate, candidate.id, source);
+  const preferredMax = getPreferredMaxTeacherConsecutivePeriods(source);
+  const excess = Math.max(0, stats.maxPeriods - preferredMax);
+  const softPenalty = Math.max(0, stats.maxPeriods - 1) * 90;
+  const hardPenalty = excess ? (excess * excess * 5000) + (stats.maxMinutes * 8) : 0;
+  return softPenalty + hardPenalty;
+}
+function candidateExceedsTeacherConsecutiveLimit(candidate, schedules, source = data) {
+  if (!candidate?.teacherId) return false;
+  const stats = getTeacherConsecutiveStats(schedules, candidate.teacherId, candidate.day, candidate, candidate.id, source);
+  return stats.maxPeriods > getPreferredMaxTeacherConsecutivePeriods(source);
+}
+function getTeacherSlotWellnessPenalty(load, schedules, day, start) {
+  if (!load?.teacherId) return 0;
+  const candidate = {
+    id: '__teacher_wellness_candidate__',
+    sectionId: load.sectionId,
+    subjectId: load.subjectId,
+    teacherId: load.teacherId,
+    day,
+    start,
+    duration: Number(load.duration || data.settings.slotDuration || 50),
+    roomId: load.roomId || DEFAULT_ROOM_ID,
+    roomMode: load.roomMode || 'default'
+  };
+  return getTeacherConsecutivePenaltyForCandidate(candidate, schedules);
 }
 
 function getDayWindowConflict(schedule, source = data) {
@@ -2303,30 +2400,36 @@ function findSlotForLoad(load, schedules, meetingIndex, options = {}) {
     const scoreB = getDayScore(b, schedules, load) + autoSortNoise(seed, `${load.id}:${load.sectionId}:${load.subjectId}:${meetingIndex}:${b}`, options.reshuffle ? 18 : 3);
     return scoreA - scoreB || ((DAYS.indexOf(a) + meetingIndex) % DAYS.length) - ((DAYS.indexOf(b) + meetingIndex) % DAYS.length);
   });
-  for (const avoidSameSubjectDay of [true, false]) {
-    for (const day of sortedDays) {
-      if (avoidSameSubjectDay && schedules.some(item => item.day === day && item.sectionId === load.sectionId && item.subjectId === load.subjectId)) continue;
-      const daySlots = generateSlots(day, { sectionId: load.sectionId });
-      const dayEnd = toMinutes(getDayEnd(day));
-      const sortedSlots = [...daySlots].sort((a,b) => {
-        const sectionA = schedules.filter(item => item.day === day && item.sectionId === load.sectionId && toMinutes(item.start) < toMinutes(a)).length;
-        const sectionB = schedules.filter(item => item.day === day && item.sectionId === load.sectionId && toMinutes(item.start) < toMinutes(b)).length;
-        const base = sectionA - sectionB || toMinutes(a) - toMinutes(b);
-        if (!options.reshuffle) return base;
-        return base + autoSortNoise(seed, `${load.id}:${day}:${a}:${meetingIndex}`, 12) - autoSortNoise(seed, `${load.id}:${day}:${b}:${meetingIndex}`, 12);
-      });
-      for (const start of sortedSlots) {
-        if (toMinutes(start) < teacherStart) continue;
-        if (toMinutes(start) + Number(load.duration || 50) > dayEnd) continue;
-        let roomId = DEFAULT_ROOM_ID;
-        if (load.roomMode === 'manual') roomId = load.roomId;
-        if (load.roomMode === 'auto') {
-          const room = findAutoRoomInList(load.sectionId, day, start, load.duration, schedules);
-          if (!room) continue;
-          roomId = room.id;
+  const consecutiveModes = load.teacherId ? [true, false] : [false];
+  for (const protectTeacherBreaks of consecutiveModes) {
+    for (const avoidSameSubjectDay of [true, false]) {
+      for (const day of sortedDays) {
+        if (avoidSameSubjectDay && schedules.some(item => item.day === day && item.sectionId === load.sectionId && item.subjectId === load.subjectId)) continue;
+        const daySlots = generateSlots(day, { sectionId: load.sectionId });
+        const dayEnd = toMinutes(getDayEnd(day));
+        const sortedSlots = [...daySlots].sort((a,b) => {
+          const sectionA = schedules.filter(item => item.day === day && item.sectionId === load.sectionId && toMinutes(item.start) < toMinutes(a)).length;
+          const sectionB = schedules.filter(item => item.day === day && item.sectionId === load.sectionId && toMinutes(item.start) < toMinutes(b)).length;
+          const wellnessA = getTeacherSlotWellnessPenalty(load, schedules, day, a);
+          const wellnessB = getTeacherSlotWellnessPenalty(load, schedules, day, b);
+          const base = wellnessA - wellnessB || sectionA - sectionB || toMinutes(a) - toMinutes(b);
+          if (!options.reshuffle) return base;
+          return base + autoSortNoise(seed, `${load.id}:${day}:${a}:${meetingIndex}`, 12) - autoSortNoise(seed, `${load.id}:${day}:${b}:${meetingIndex}`, 12);
+        });
+        for (const start of sortedSlots) {
+          if (toMinutes(start) < teacherStart) continue;
+          if (toMinutes(start) + Number(load.duration || 50) > dayEnd) continue;
+          let roomId = DEFAULT_ROOM_ID;
+          if (load.roomMode === 'manual') roomId = load.roomId;
+          if (load.roomMode === 'auto') {
+            const room = findAutoRoomInList(load.sectionId, day, start, load.duration, schedules);
+            if (!room) continue;
+            roomId = room.id;
+          }
+          const candidate = { id: createId('sched'), sectionId: load.sectionId, subjectId: load.subjectId, teacherId: load.teacherId, day, start, duration: Number(load.duration || 50), roomId, roomMode: load.roomMode || 'default', sourceLoadId: load.id };
+          if (protectTeacherBreaks && candidateExceedsTeacherConsecutiveLimit(candidate, schedules)) continue;
+          if (!getConflictsInList(candidate, schedules).length) return candidate;
         }
-        const candidate = { id: createId('sched'), sectionId: load.sectionId, subjectId: load.subjectId, teacherId: load.teacherId, day, start, duration: Number(load.duration || 50), roomId, roomMode: load.roomMode || 'default', sourceLoadId: load.id };
-        if (!getConflictsInList(candidate, schedules).length) return candidate;
       }
     }
   }
