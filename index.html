@@ -265,8 +265,12 @@
           <small>Open teacher weekly checker tab</small>
         </button>
         <button type="button" id="exportSpreadsheetSideBtn" class="control-action-btn" role="listitem">
-          <span>Export Weekly Spreadsheet</span>
+          <span>Export Section Schedules XLSX</span>
           <small>All section schedules in one XLSX</small>
+        </button>
+        <button type="button" id="exportTeacherSpreadsheetSideBtn" class="control-action-btn" role="listitem">
+          <span>Export Teacher Schedules XLSX</span>
+          <small>All teacher schedules in one XLSX</small>
         </button>
       </div>
     </aside>
@@ -537,7 +541,7 @@
       <div class="control-modal-body">
         <form id="teachingLoadForm" class="stacked-form compact-settings-form load-modal-grid">
           <label>
-            Teacher
+            Teacher / No Teacher
             <select id="loadTeacher" required></select>
           </label>
           <label>
@@ -604,7 +608,7 @@
             <button id="loadCsvImportBtn" type="button" class="primary">Import CSV</button>
             <button id="resetTeachingLoadsBtn" type="button" class="danger compact-btn full-row">Delete All Teaching Loads</button>
           </div>
-          <p class="hint">CSV columns: <strong>teacher, subject, sections, meetings, duration, roomMode, room, teacherStart</strong>. Use semicolon or vertical bar for multiple sections, for example: <code>Grade 7 - Diamond; Grade 7 - Jade</code>. Room mode may be <code>default</code>, <code>auto</code>, or <code>manual</code>.</p>
+          <p class="hint">CSV columns: <strong>teacher, subject, sections, meetings, duration, roomMode, room, teacherStart</strong>. Use semicolon or vertical bar for multiple sections, for example: <code>Grade 7 - Diamond; Grade 7 - Jade</code>. Room mode may be <code>default</code>, <code>auto</code>, or <code>manual</code>. Use <code>NT</code> in the teacher column for independent student activities such as SWP.</p>
         </section>
 
         <ul id="teachingLoadList" class="item-list modal-list"></ul>
@@ -664,7 +668,7 @@
           </div>
         </form>
         <p id="syncStatus" class="sync-status muted">Server sync is off. Data is saved locally in this browser.</p>
-        
+        <p class="hint">Use the Node/MongoDB server included in the ZIP. For same-server hosting, leave the URL blank or use the server origin.</p>
       </div>
     </section>
   </div>

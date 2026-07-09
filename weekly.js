@@ -4,6 +4,7 @@ const API_REVISION_KEY = 'offlineClassScheduler.apiRevision.v1';
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 const DEFAULT_ROOM_ID = '__default_classroom__';
 const DEFAULT_ROOM_NAME = 'Default Classroom';
+const NO_TEACHER_LABEL = 'No Teacher (NT)';
 const defaultData = { settings: { dayStart: '07:30', dayEnd: '16:30', slotDuration: 50, dayStarts: { Monday: '07:50', Tuesday: '07:30', Wednesday: '07:30', Thursday: '07:30', Friday: '07:30' } }, sections: [], subjects: [], teachers: [], rooms: [], teachingLoads: [], fixedActivities: [], schedules: [], scheduleWaitlist: [], generatorRun: 0 };
 
 let schedulerData = loadData();
@@ -20,7 +21,7 @@ let pointerDragState = null;
 
 const els = {
   viewEyebrow: document.getElementById('viewEyebrow'), viewTitle: document.getElementById('viewTitle'), viewSubtitle: document.getElementById('viewSubtitle'), printBtn: document.getElementById('printBtn'), closeBtn: document.getElementById('closeBtn'), refreshBtn: document.getElementById('refreshBtn'), editToggle: document.getElementById('editToggle'),
-  totalClasses: document.getElementById('totalClasses'), totalMinutes: document.getElementById('totalMinutes'), dailySummary: document.getElementById('dailySummary'), generatedAt: document.getElementById('generatedAt'), calendarBody: document.getElementById('calendarBody'), statusLine: document.getElementById('statusLine'), navigatorCard: document.getElementById('navigatorCard'), navigatorSelect: document.getElementById('navigatorSelect'), navigatorLabel: document.getElementById('navigatorLabel'), navigatorHint: document.getElementById('navigatorHint'), exportIcsBtn: document.getElementById('exportIcsBtn'),
+  totalClasses: document.getElementById('totalClasses'), totalMinutes: document.getElementById('totalMinutes'), dailySummary: document.getElementById('dailySummary'), generatedAt: document.getElementById('generatedAt'), calendarBody: document.getElementById('calendarBody'), statusLine: document.getElementById('statusLine'), navigatorCard: document.getElementById('navigatorCard'), navigatorSelect: document.getElementById('navigatorSelect'), navigatorLabel: document.getElementById('navigatorLabel'), navigatorHint: document.getElementById('navigatorHint'), exportAllTeacherXlsxBtn: document.getElementById('exportAllTeacherXlsxBtn'), exportIcsBtn: document.getElementById('exportIcsBtn'),
   messageModal: document.getElementById('messageModal'), modalMessage: document.getElementById('modalMessage'), modalOkBtn: document.getElementById('modalOkBtn'), modalCloseBtn: document.getElementById('modalCloseBtn')
 };
 
@@ -152,6 +153,8 @@ function timeRange(start, duration) { return `${formatTime(start)} - ${formatTim
 function overlaps(aStart, aDuration, bStart, bDuration) { const aEnd = toMinutes(aStart) + Number(aDuration || 0); const bEnd = toMinutes(bStart) + Number(bDuration || 0); return toMinutes(aStart) < bEnd && toMinutes(bStart) < aEnd; }
 function isDefaultRoom(roomId) { return !roomId || roomId === DEFAULT_ROOM_ID; }
 function byName(list, id) { if (isDefaultRoom(id)) return DEFAULT_ROOM_NAME; const match = list.find(item => item.id === id); if (match) return match.name; const nameMatch = list.find(item => item.name === id); return nameMatch ? nameMatch.name : 'Deleted Item'; }
+function isNoTeacherId(value) { return !String(value || '').trim(); }
+function teacherName(teacherId) { return isNoTeacherId(teacherId) ? NO_TEACHER_LABEL : byName(schedulerData.teachers, teacherId); }
 function isFixedSubjectActivity(activity) { return String(activity?.category || '').toLowerCase() === 'fixedsubject'; }
 function isBatchSubjectActivity(activity) { return ['batchsubject', 'batchfixedsubject', 'batch'].includes(String(activity?.category || '').toLowerCase()); }
 function normalizeBatchOffering(activity, offering = {}, index = 0) {
@@ -336,13 +339,13 @@ function getViewConfig(kind = currentKind) {
       collectionName: 'sections', scheduleField: 'sectionId', legacyField: 'section', eyebrow: 'Section Weekly Calendar', subtitle: 'Monday to Friday section schedule view. Fixed activities are protected and cannot be moved.', printLabel: 'Print Section Schedule', emptyMessage: 'No weekly schedule has been created for this section yet.', missingMessage: 'Section not found. Open this view from the main scheduler again.',
       block(item) {
         if (isFixedSchedule(item) && !isFixedTeachingSchedule(item)) return [`<strong>${escapeHtml(item.title || 'Fixed Activity')}</strong>`, `<span class="class-time">${escapeHtml(timeRange(item.start, item.duration))}</span>`].join('');
-        if (isBatchSubjectSchedule(item)) return [`<strong>${escapeHtml(fixedDisplayTitle(item))}</strong>`, `<span class="class-time">${escapeHtml(timeRange(item.start, item.duration))}</span>`].join('');
+        if (isBatchSubjectSchedule(item)) return [`<strong>${escapeHtml(fixedDisplayTitle(item))}</strong>`, `<span class="class-time">${escapeHtml(timeRange(item.start, item.duration))}</span>`, '<span>Batch-wide block</span>'].join('');
         const subjectTitle = isFixedSubjectSchedule(item) ? (item.title || byName(schedulerData.subjects, item.subjectId)) : byName(schedulerData.subjects, item.subjectId);
-        return [`<strong>${escapeHtml(subjectTitle)}</strong>`, `<span class="class-time">${escapeHtml(timeRange(item.start, item.duration))}</span>`, `<span>${escapeHtml(byName(schedulerData.teachers, item.teacherId))}${isFixedSubjectSchedule(item) ? ' · Fixed Subject' : ''}</span>`, `<span>${escapeHtml(byName(schedulerData.rooms, item.roomId))}</span>`].join('');
+        return [`<strong>${escapeHtml(subjectTitle)}</strong>`, `<span class="class-time">${escapeHtml(timeRange(item.start, item.duration))}</span>`, `<span>${escapeHtml(teacherName(item.teacherId))}${isFixedSubjectSchedule(item) ? ' · Fixed Subject' : ''}</span>`, `<span>${escapeHtml(byName(schedulerData.rooms, item.roomId))}</span>`].join('');
       }
     },
     teacher: { collectionName: 'teachers', scheduleField: 'teacherId', legacyField: 'teacher', eyebrow: 'Teacher Weekly Calendar', subtitle: 'Monday to Friday teaching load view. Use this to check teacher assignments and print individual schedules.', printLabel: 'Print Teacher Schedule', emptyMessage: 'No weekly schedule has been created for this teacher yet.', missingMessage: 'Teacher not found. Open this view from the main scheduler again.', block(item) { if (isBatchSubjectSchedule(item)) return [`<strong>${escapeHtml(fixedDisplayTitle(item))}</strong>`, `<span class="class-time">${escapeHtml(timeRange(item.start, item.duration))}</span>`, '<span>Batch-wide elective/research block</span>', `<span>${escapeHtml(byName(schedulerData.rooms, item.roomId))}</span>`].join(''); return [`<strong>${escapeHtml(byName(schedulerData.sections, item.sectionId))}</strong>`, `<span class="class-time">${escapeHtml(timeRange(item.start, item.duration))}</span>`, `<span>${escapeHtml(isFixedTeachingSchedule(item) ? fixedDisplayTitle(item) : byName(schedulerData.subjects, item.subjectId))}</span>`, `<span>${escapeHtml(byName(schedulerData.rooms, item.roomId))}</span>`].join(''); } },
-    room: { collectionName: 'rooms', scheduleField: 'roomId', legacyField: 'room', eyebrow: 'Room Weekly Calendar', subtitle: 'Monday to Friday laboratory/special room usage view. Print this schedule for room posting or room monitoring.', printLabel: 'Print Room Schedule', emptyMessage: 'No weekly schedule has been created for this room yet.', missingMessage: 'Room not found. Open this view from the main scheduler again.', block(item) { if (isBatchSubjectSchedule(item)) return [`<strong>${escapeHtml(fixedDisplayTitle(item))}</strong>`, `<span class="class-time">${escapeHtml(timeRange(item.start, item.duration))}</span>`, '<span>Batch-wide elective/research offering</span>', `<span>${escapeHtml(byName(schedulerData.teachers, item.teacherId))}</span>`].join(''); return [`<strong>${escapeHtml(byName(schedulerData.sections, item.sectionId))}</strong>`, `<span class="class-time">${escapeHtml(timeRange(item.start, item.duration))}</span>`, `<span>${escapeHtml(isFixedTeachingSchedule(item) ? fixedDisplayTitle(item) : byName(schedulerData.subjects, item.subjectId))}</span>`, `<span>${escapeHtml(byName(schedulerData.teachers, item.teacherId))}</span>`].join(''); } }
+    room: { collectionName: 'rooms', scheduleField: 'roomId', legacyField: 'room', eyebrow: 'Room Weekly Calendar', subtitle: 'Monday to Friday laboratory/special room usage view. Print this schedule for room posting or room monitoring.', printLabel: 'Print Room Schedule', emptyMessage: 'No weekly schedule has been created for this room yet.', missingMessage: 'Room not found. Open this view from the main scheduler again.', block(item) { if (isBatchSubjectSchedule(item)) return [`<strong>${escapeHtml(fixedDisplayTitle(item))}</strong>`, `<span class="class-time">${escapeHtml(timeRange(item.start, item.duration))}</span>`, '<span>Batch-wide elective/research offering</span>', `<span>${escapeHtml(teacherName(item.teacherId))}</span>`].join(''); return [`<strong>${escapeHtml(byName(schedulerData.sections, item.sectionId))}</strong>`, `<span class="class-time">${escapeHtml(timeRange(item.start, item.duration))}</span>`, `<span>${escapeHtml(isFixedTeachingSchedule(item) ? fixedDisplayTitle(item) : byName(schedulerData.subjects, item.subjectId))}</span>`, `<span>${escapeHtml(teacherName(item.teacherId))}</span>`].join(''); } }
   }[kind] || null;
 }
 function getEntity(config, id) { const collection = schedulerData[config.collectionName] || []; return collection.find(item => item.id === id) || collection.find(item => item.name === id) || null; }
@@ -529,6 +532,7 @@ function renderNavigator() {
   if (!els.navigatorCard || !els.navigatorSelect) return;
   if (!browserMode) {
     els.navigatorCard.classList.add('hidden');
+    if (els.exportAllTeacherXlsxBtn) els.exportAllTeacherXlsxBtn.classList.add('hidden');
     return;
   }
   const kind = browserKindFromMode(browserMode);
@@ -537,6 +541,7 @@ function renderNavigator() {
   const hint = browserMode === 'sections' ? 'Select any section to display its weekly schedule.' : 'Select any teacher to check their weekly teaching load.';
   els.navigatorLabel.textContent = label;
   els.navigatorHint.textContent = hint;
+  if (els.exportAllTeacherXlsxBtn) els.exportAllTeacherXlsxBtn.classList.toggle('hidden', browserMode !== 'teachers');
   const collection = config ? [...(schedulerData[config.collectionName] || [])].sort((a,b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' })) : [];
   if (!collection.length) {
     els.navigatorSelect.innerHTML = '<option value="">No records available</option>';
@@ -598,7 +603,7 @@ function eventDescription(item) {
   return [
     `Section: ${byName(schedulerData.sections, item.sectionId)}`,
     `Subject: ${byName(schedulerData.subjects, item.subjectId)}`,
-    `Teacher: ${byName(schedulerData.teachers, item.teacherId)}`,
+    `Teacher: ${teacherName(item.teacherId)}`,
     `Room: ${byName(schedulerData.rooms, item.roomId)}`,
     `Time: ${timeRange(item.start, item.duration)}`
   ].join('\\n');
@@ -645,6 +650,18 @@ function exportCurrentIcs() {
   const name = safeFileName(currentEntity?.name || 'weekly-schedule');
   downloadTextFile(buildCurrentIcs(), `${name}-weekly-calendar.ics`, 'text/calendar;charset=utf-8');
   showStatus('iCal file exported. Import it into Google Calendar, iOS Calendar, or macOS Calendar.');
+}
+function exportAllTeacherXlsxFromBrowser() {
+  try {
+    if (window.opener && !window.opener.closed && typeof window.opener.exportTeacherSpreadsheet === 'function') {
+      window.opener.exportTeacherSpreadsheet();
+      showStatus('Teacher XLSX export started from the main scheduler tab.');
+      return;
+    }
+  } catch (error) {
+    // Fall through to user-friendly message.
+  }
+  showModal('Teacher XLSX export is available when this browser tab is opened from the main scheduler dashboard. Keep the main scheduler tab open, then click Browse Teacher Schedules again.');
 }
 function renderHeader() { renderNavigator(); const config = getViewConfig(); if (!config || !currentEntity) { els.viewEyebrow.textContent = 'Weekly Calendar'; els.viewTitle.textContent = 'Schedule Not Found'; els.viewSubtitle.textContent = config?.missingMessage || 'Open this view from the main scheduler again.'; els.printBtn.textContent = 'Print Schedule'; return; } document.title = `${currentEntity.name} Weekly Schedule`; els.viewEyebrow.textContent = browserMode ? (browserMode === 'sections' ? 'Section Schedule Browser' : 'Teacher Schedule Browser') : config.eyebrow; els.viewTitle.textContent = currentEntity.name; els.viewSubtitle.textContent = browserMode ? 'Use the dropdown below to switch calendars quickly. This view remains printable and exportable.' : config.subtitle; els.printBtn.textContent = config.printLabel; }
 function renderSummary() { const schedules = filteredSchedules().filter(isClassLikeSchedule); els.totalClasses.textContent = schedules.length; els.totalMinutes.textContent = schedules.reduce((sum,item) => sum + Number(item.duration || 0), 0); els.dailySummary.innerHTML = DAYS.map(day => `<span><strong>${day.slice(0,3)}</strong> ${schedules.filter(item => item.day === day).length}</span>`).join(''); els.generatedAt.textContent = new Date().toLocaleString(); }
@@ -903,6 +920,7 @@ async function initializeView() {
 els.editToggle.addEventListener('click', () => setEditingMode(!editing));
 els.printBtn.addEventListener('click', () => window.print());
 if (els.exportIcsBtn) els.exportIcsBtn.addEventListener('click', exportCurrentIcs);
+if (els.exportAllTeacherXlsxBtn) els.exportAllTeacherXlsxBtn.addEventListener('click', exportAllTeacherXlsxFromBrowser);
 if (els.navigatorSelect) els.navigatorSelect.addEventListener('change', event => selectBrowserEntity(event.target.value));
 els.closeBtn.addEventListener('click', () => window.close());
 els.refreshBtn.addEventListener('click', refreshFromStorage);

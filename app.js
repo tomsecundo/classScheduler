@@ -5,6 +5,8 @@ const SYNC_POLL_MS = 10000;
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 const DEFAULT_ROOM_ID = '__default_classroom__';
 const DEFAULT_ROOM_NAME = 'Default Classroom';
+const NO_TEACHER_SELECT_VALUE = '__no_teacher__';
+const NO_TEACHER_LABEL = 'No Teacher (NT)';
 
 const defaultData = {
   settings: { dayStart: '07:30', dayEnd: '16:30', slotDuration: 50, dayStarts: { Monday: '07:50', Tuesday: '07:30', Wednesday: '07:30', Thursday: '07:30', Friday: '07:30' } },
@@ -40,7 +42,7 @@ const els = {
   loadSubject: $('loadSubject'), loadTeacher: $('loadTeacher'), loadMeetings: $('loadMeetings'), loadDuration: $('loadDuration'), loadRoomMode: $('loadRoomMode'), loadManualRoomWrap: $('loadManualRoomWrap'), loadManualRoom: $('loadManualRoom'), teachingLoadList: $('teachingLoadList'), replaceExistingSchedule: $('replaceExistingSchedule'), loadSectionChoices: $('loadSectionChoices'), loadSectionFilter: $('loadSectionFilter'), loadSelectAllSections: $('loadSelectAllSections'), loadClearSections: $('loadClearSections'), loadSelectMatchingSections: $('loadSelectMatchingSections'), loadCsvFile: $('loadCsvFile'), loadCsvImportBtn: $('loadCsvImportBtn'), loadCsvTemplateBtn: $('loadCsvTemplateBtn'), loadCsvCreateMissing: $('loadCsvCreateMissing'), resetTeachingLoadsBtn: $('resetTeachingLoadsBtn'),
   fixedActivityForm: $('fixedActivityForm'), fixedType: $('fixedType'), fixedTitle: $('fixedTitle'), fixedSubjectFields: $('fixedSubjectFields'), fixedBatchFields: $('fixedBatchFields'), fixedSubject: $('fixedSubject'), fixedTeacher: $('fixedTeacher'), fixedTeacherFilter: $('fixedTeacherFilter'), fixedTeacherChoices: $('fixedTeacherChoices'), fixedTeacherSelectMatching: $('fixedTeacherSelectMatching'), fixedTeacherSelectAll: $('fixedTeacherSelectAll'), fixedTeacherClear: $('fixedTeacherClear'), fixedOfferingList: $('fixedOfferingList'), fixedAddOffering: $('fixedAddOffering'), fixedRoomMode: $('fixedRoomMode'), fixedManualRoomWrap: $('fixedManualRoomWrap'), fixedManualRoom: $('fixedManualRoom'), fixedStart: $('fixedStart'), fixedDuration: $('fixedDuration'), fixedSectionFilter: $('fixedSectionFilter'), fixedSectionChoices: $('fixedSectionChoices'), fixedActivityList: $('fixedActivityList'), fixedLunchPreset: $('fixedLunchPreset'), fixedSwpPreset: $('fixedSwpPreset'), fixedFlagCeremonyPreset: $('fixedFlagCeremonyPreset'), fixedFlagRetreatPreset: $('fixedFlagRetreatPreset'), fixedSelectAllSections: $('fixedSelectAllSections'), fixedClearSections: $('fixedClearSections'), fixedSelectMatchingSections: $('fixedSelectMatchingSections'),
   sectionList: $('sectionList'), subjectList: $('subjectList'), teacherList: $('teacherList'), roomList: $('roomList'), scheduleTable: $('scheduleTable'), filterSection: $('filterSection'), filterDay: $('filterDay'), showFixedSchedules: $('showFixedSchedules'),
-  dayStart: $('dayStart'), dayEnd: $('dayEnd'), slotDuration: $('slotDuration'), dayStartMonday: $('dayStartMonday'), dayStartTuesday: $('dayStartTuesday'), dayStartWednesday: $('dayStartWednesday'), dayStartThursday: $('dayStartThursday'), dayStartFriday: $('dayStartFriday'), mondayFlagPatternBtn: $('mondayFlagPatternBtn'), importFile: $('importFile'), exportBtn: $('exportBtn'), printBtn: $('printBtn'), exportSpreadsheetBtn: $('exportSpreadsheetBtn'), exportSpreadsheetSideBtn: $('exportSpreadsheetSideBtn'), browseSectionsBtn: $('browseSectionsBtn'), browseTeachersBtn: $('browseTeachersBtn'), clearScheduleForm: $('clearScheduleForm'), autoGenerateBtn: $('autoGenerateBtn'), reshuffleScheduleBtn: $('reshuffleScheduleBtn'), perfectScheduleBtn: $('perfectScheduleBtn'), masterResetScheduleBtn: $('masterResetScheduleBtn'), generationProgress: $('generationProgress'), generationProgressTitle: $('generationProgressTitle'), generationProgressCount: $('generationProgressCount'), generationProgressBar: $('generationProgressBar'), generationProgressDetail: $('generationProgressDetail'),
+  dayStart: $('dayStart'), dayEnd: $('dayEnd'), slotDuration: $('slotDuration'), dayStartMonday: $('dayStartMonday'), dayStartTuesday: $('dayStartTuesday'), dayStartWednesday: $('dayStartWednesday'), dayStartThursday: $('dayStartThursday'), dayStartFriday: $('dayStartFriday'), mondayFlagPatternBtn: $('mondayFlagPatternBtn'), importFile: $('importFile'), exportBtn: $('exportBtn'), printBtn: $('printBtn'), exportSpreadsheetBtn: $('exportSpreadsheetBtn'), exportSpreadsheetSideBtn: $('exportSpreadsheetSideBtn'), exportTeacherSpreadsheetSideBtn: $('exportTeacherSpreadsheetSideBtn'), browseSectionsBtn: $('browseSectionsBtn'), browseTeachersBtn: $('browseTeachersBtn'), clearScheduleForm: $('clearScheduleForm'), autoGenerateBtn: $('autoGenerateBtn'), reshuffleScheduleBtn: $('reshuffleScheduleBtn'), perfectScheduleBtn: $('perfectScheduleBtn'), masterResetScheduleBtn: $('masterResetScheduleBtn'), generationProgress: $('generationProgress'), generationProgressTitle: $('generationProgressTitle'), generationProgressCount: $('generationProgressCount'), generationProgressBar: $('generationProgressBar'), generationProgressDetail: $('generationProgressDetail'),
   syncEnabled: $('syncEnabled'), apiBaseUrl: $('apiBaseUrl'), syncStatus: $('syncStatus'), syncPullBtn: $('syncPullBtn'), syncPushBtn: $('syncPushBtn'), serverRevision: $('serverRevision'),
   statScheduledClasses: $('statScheduledClasses'), statTeachers: $('statTeachers'), statStudents: $('statStudents'), statSubjects: $('statSubjects'), statRooms: $('statRooms'),
   sectionCount: $('sectionCount'), subjectCount: $('subjectCount'), teacherCount: $('teacherCount'), roomCount: $('roomCount'), fixedCount: $('fixedCount'), loadCount: $('loadCount'),
@@ -243,6 +245,12 @@ function byName(list, id) {
   const nameMatch = list.find(item => item.name === id);
   return nameMatch ? nameMatch.name : 'Deleted Item';
 }
+function isNoTeacherId(value) { return !String(value || '').trim() || value === NO_TEACHER_SELECT_VALUE; }
+function teacherName(teacherId) { return isNoTeacherId(teacherId) ? NO_TEACHER_LABEL : byName(data.teachers, teacherId); }
+function teacherSelectValueToId(value) { return value === NO_TEACHER_SELECT_VALUE ? '' : String(value || ''); }
+function teacherIdToSelectValue(value) { return isNoTeacherId(value) ? NO_TEACHER_SELECT_VALUE : value; }
+function normalizeNoTeacherKey(value) { return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ''); }
+function isNoTeacherCsvValue(value) { return ['nt', 'noteacher', 'none', 'n/a', 'na', 'noassignedteacher', 'independent'].includes(normalizeNoTeacherKey(value)); }
 function roomName(roomId) { return isDefaultRoom(roomId) ? DEFAULT_ROOM_NAME : byName(data.rooms, roomId); }
 function loadRoomLabel(load) {
   if (!load || load.roomMode === 'default' || isDefaultRoom(load.roomId)) return DEFAULT_ROOM_NAME;
@@ -603,7 +611,7 @@ function setTeachingLoadEditMode(id) {
   renderLoadSectionChoices();
   setLoadSections([load.sectionId].filter(Boolean));
   els.loadSubject.value = load.subjectId || '';
-  els.loadTeacher.value = load.teacherId || '';
+  els.loadTeacher.value = teacherIdToSelectValue(load.teacherId);
   els.loadMeetings.value = load.meetings || 1;
   els.loadDuration.value = load.duration || 50;
   els.loadRoomMode.value = load.roomMode || 'default';
@@ -676,7 +684,7 @@ function setScheduleEditMode(id) {
   enterEditMode('schedules', id);
   els.scheduleSection.value = item.sectionId || '';
   els.scheduleSubject.value = item.subjectId || '';
-  els.scheduleTeacher.value = item.teacherId || '';
+  els.scheduleTeacher.value = teacherIdToSelectValue(item.teacherId);
   els.scheduleDay.value = item.day || 'Monday';
   renderTimeOptions();
   if ([...els.scheduleStart.options].some(opt => opt.value === item.start)) els.scheduleStart.value = item.start;
@@ -696,7 +704,7 @@ function buildScheduleFromForm(existingId = null) {
     id: existingId || createId('sched'),
     sectionId: els.scheduleSection.value,
     subjectId: els.scheduleSubject.value,
-    teacherId: els.scheduleTeacher.value,
+    teacherId: teacherSelectValueToId(els.scheduleTeacher.value),
     day: els.scheduleDay.value,
     start: els.scheduleStart.value,
     duration,
@@ -798,6 +806,12 @@ function renderOptions(select, list, placeholder, labelFn = item => item.name) {
   select.innerHTML = `<option value="" disabled selected>${escapeHtml(placeholder)}</option>`;
   sortByName(list).forEach(item => select.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(item.id)}">${escapeHtml(labelFn(item))}</option>`));
 }
+function renderTeacherSelect(select, placeholder, includeNoTeacher = false) {
+  renderOptions(select, data.teachers, placeholder, item => `${item.name} · ${teacherStartLabel(item)}`);
+  if (select && includeNoTeacher) {
+    select.insertAdjacentHTML('beforeend', `<option value="${NO_TEACHER_SELECT_VALUE}">${NO_TEACHER_LABEL} · independent/student activity</option>`);
+  }
+}
 function renderTimeOptions() {
   const selectedDay = els.scheduleDay?.value || DAYS[0];
   const previousScheduleStart = els.scheduleStart?.value;
@@ -839,10 +853,10 @@ function renderTeachingLoadList() {
     list.innerHTML = '<li><span><strong>No teaching loads yet</strong><br><small>Add loads before using Auto Generate.</small></span></li>';
     return;
   }
-  [...data.teachingLoads].sort((a,b) => byName(data.sections, a.sectionId).localeCompare(byName(data.sections, b.sectionId), undefined, { sensitivity: 'base' }) || byName(data.subjects, a.subjectId).localeCompare(byName(data.subjects, b.subjectId), undefined, { sensitivity: 'base' }) || byName(data.teachers, a.teacherId).localeCompare(byName(data.teachers, b.teacherId), undefined, { sensitivity: 'base' })).forEach(load => {
+  [...data.teachingLoads].sort((a,b) => byName(data.sections, a.sectionId).localeCompare(byName(data.sections, b.sectionId), undefined, { sensitivity: 'base' }) || byName(data.subjects, a.subjectId).localeCompare(byName(data.subjects, b.subjectId), undefined, { sensitivity: 'base' }) || teacherName(a.teacherId).localeCompare(teacherName(b.teacherId), undefined, { sensitivity: 'base' })).forEach(load => {
     const section = byName(data.sections, load.sectionId);
     const subject = byName(data.subjects, load.subjectId);
-    const teacher = byName(data.teachers, load.teacherId);
+    const teacher = teacherName(load.teacherId);
     const room = loadRoomLabel(load);
     list.insertAdjacentHTML('beforeend', `
       <li>
@@ -949,9 +963,9 @@ function renderLists() {
 function renderSelects() {
   renderOptions(els.scheduleSection, data.sections, 'Choose section', item => item.size ? `${item.name} (${item.size})` : item.name);
   renderOptions(els.scheduleSubject, data.subjects, 'Choose subject', item => `${item.name} - ${item.duration || 50} mins`);
-  renderOptions(els.scheduleTeacher, data.teachers, 'Choose teacher', item => `${item.name} · ${teacherStartLabel(item)}`);
+  renderTeacherSelect(els.scheduleTeacher, 'Choose teacher', true);
   renderOptions(els.manualRoom, data.rooms, 'Choose lab/room', item => item.capacity ? `${item.name} (${item.capacity})` : item.name);
-  renderOptions(els.loadTeacher, data.teachers, 'Choose teacher', item => `${item.name} · ${teacherStartLabel(item)}`);
+  renderTeacherSelect(els.loadTeacher, 'Choose teacher', true);
   renderOptions(els.loadSubject, data.subjects, 'Choose subject', item => `${item.name} - ${item.duration || 50} mins`);
   renderOptions(els.loadManualRoom, data.rooms, 'Choose lab/room', item => item.capacity ? `${item.name} (${item.capacity})` : item.name);
   renderOptions(els.fixedSubject, data.subjects, 'Choose fixed subject', item => `${item.name} - ${item.duration || 50} mins`);
@@ -1353,7 +1367,7 @@ function renderScheduleTable() {
     const fixedSubject = isFixedTeachingSchedule(item);
     const sectionName = byName(data.sections, item.sectionId);
     const subjectName = fixedSubject ? getFixedDisplayTitle(item) : fixed ? item.title || 'Fixed Activity' : byName(data.subjects, item.subjectId);
-    const teacherName = fixedSubject && item.teacherId ? byName(data.teachers, item.teacherId) : fixedSubject ? 'Batch Block' : fixed ? 'Fixed Activity' : byName(data.teachers, item.teacherId);
+    const displayTeacherName = fixedSubject && item.teacherId ? teacherName(item.teacherId) : fixedSubject ? 'Batch Block' : fixed ? 'Fixed Activity' : teacherName(item.teacherId);
     const displayRoom = roomName(item.roomId);
     const roomView = fixed && !fixedSubject
       ? '<small class="muted-note">Protected slot</small>'
@@ -1364,13 +1378,22 @@ function renderScheduleTable() {
     const actions = fixed
       ? `<span class="fixed-badge">${isBatchSubjectSchedule(item) ? 'Batch Block' : fixedSubject ? 'Fixed Subject' : 'Fixed'}</span>`
       : `<div class="row-actions"><button type="button" class="secondary" data-edit-schedule="${escapeHtml(item.id)}">Edit</button><button type="button" class="secondary" data-duplicate="${escapeHtml(item.id)}">Duplicate</button><button type="button" class="icon-btn" data-delete-schedule="${escapeHtml(item.id)}">Delete</button></div>`;
+    const teacherCell = fixedSubject && item.teacherId
+      ? `<button type="button" class="text-link no-print" data-open-weekly-kind="teacher" data-open-weekly-id="${escapeHtml(item.teacherId)}">${escapeHtml(displayTeacherName)}</button><span class="print-only">${escapeHtml(displayTeacherName)}</span>`
+      : fixedSubject
+        ? `<span class="muted-note">${escapeHtml(displayTeacherName)}</span>`
+        : fixed
+          ? '<span class="muted-note">Fixed Activity</span>'
+          : item.teacherId
+            ? `<button type="button" class="text-link no-print" data-open-weekly-kind="teacher" data-open-weekly-id="${escapeHtml(item.teacherId)}">${escapeHtml(displayTeacherName)}</button><span class="print-only">${escapeHtml(displayTeacherName)}</span>`
+            : `<span class="muted-note">${escapeHtml(displayTeacherName)}</span>`;
     els.scheduleTable.insertAdjacentHTML('beforeend', `
       <tr class="${fixed ? 'fixed-row' : ''}">
         <td>${item.sectionId ? `<button type="button" class="text-link no-print" data-open-weekly-kind="section" data-open-weekly-id="${escapeHtml(item.sectionId)}">${escapeHtml(sectionName)}</button><strong class="print-only">${escapeHtml(sectionName)}</strong>` : '<span class="muted-note">Batch-wide</span>'}</td>
         <td>${escapeHtml(item.day)}</td>
         <td>${escapeHtml(timeRange(item.start, item.duration))}</td>
         <td>${fixed ? `<span class="fixed-badge">${isBatchSubjectSchedule(item) ? 'Batch Block' : fixedSubject ? 'Fixed Subject' : 'Fixed'}</span> ` : ''}${escapeHtml(subjectName)}</td>
-        <td>${fixedSubject && item.teacherId ? `<button type="button" class="text-link no-print" data-open-weekly-kind="teacher" data-open-weekly-id="${escapeHtml(item.teacherId)}">${escapeHtml(teacherName)}</button><span class="print-only">${escapeHtml(teacherName)}</span>` : fixedSubject ? `<span class="muted-note">${escapeHtml(teacherName)}</span>` : fixed ? '<span class="muted-note">Fixed Activity</span>' : `<button type="button" class="text-link no-print" data-open-weekly-kind="teacher" data-open-weekly-id="${escapeHtml(item.teacherId)}">${escapeHtml(teacherName)}</button><span class="print-only">${escapeHtml(teacherName)}</span>`}</td>
+        <td>${teacherCell}</td>
         <td>${roomCell}</td>
         <td class="no-print">${actions}</td>
       </tr>`);
@@ -1523,42 +1546,163 @@ function getExportCellText(day, start, schedules) {
   if (!start) return '';
   const exact = schedules.filter(item => item.day === day && item.start === start);
   const primary = exact.find(isFixedSchedule) || exact[0];
-  if (primary) {
-    if (isFixedSchedule(primary)) return `${primary.title || 'Fixed Activity'}\n${timeRange(primary.start, primary.duration)}`;
-    const room = roomName(primary.roomId);
-    return `${byName(data.subjects, primary.subjectId)}\n${byName(data.teachers, primary.teacherId)}${isDefaultRoom(primary.roomId) ? '' : `\n${room}`}`;
+  if (primary) return getExportItemText(primary, 'section');
+  return '';
+}
+function getExportIntervalDuration(day, starts, index) {
+  const start = starts[index];
+  const next = starts[index + 1];
+  if (start && next && toMinutes(next) > toMinutes(start)) return toMinutes(next) - toMinutes(start);
+  return getBestExportDuration(day, start, getDisplayScheduleItems());
+}
+function getExportTeacherLine(teacherId) {
+  return isNoTeacherId(teacherId) ? '' : teacherName(teacherId);
+}
+function joinExportLines(lines) {
+  return lines.filter(line => String(line || '').trim()).join('\n');
+}
+function getExportItemText(item, mode = 'section') {
+  if (!item) return '';
+  const room = byName(data.rooms, item.roomId);
+  const roomLine = isDefaultRoom(item.roomId) ? '' : room;
+  const itemTime = timeRange(item.start, item.duration);
+  if (isFixedSchedule(item) && !isFixedTeachingSchedule(item)) return joinExportLines([item.title || 'Fixed Activity', itemTime]);
+  const subjectTitle = isFixedTeachingSchedule(item) ? getFixedDisplayTitle(item) : byName(data.subjects, item.subjectId);
+  if (mode === 'teacher') {
+    if (isBatchSubjectSchedule(item)) return joinExportLines([getFixedDisplayTitle(item), getExportTeacherLine(item.teacherId), itemTime, roomLine]);
+    return joinExportLines([subjectTitle, byName(data.sections, item.sectionId), itemTime, roomLine]);
   }
-  const continuing = schedules.find(item => item.day === day && toMinutes(item.start) < toMinutes(start) && toMinutes(item.start) + Number(item.duration || 0) > toMinutes(start));
-  if (!continuing) return '';
-  if (isFixedSchedule(continuing) && !isFixedSubjectSchedule(continuing)) return `↳ ${continuing.title || 'Fixed Activity'} continues`;
-  return `↳ ${byName(data.subjects, continuing.subjectId)} continues`;
+  if (isBatchSubjectSchedule(item)) return joinExportLines([getFixedDisplayTitle(item), getExportTeacherLine(item.teacherId), itemTime, roomLine]);
+  return joinExportLines([subjectTitle, getExportTeacherLine(item.teacherId), itemTime, roomLine]);
+}
+const EXPORT_COLOR_PALETTE = ['D9EAF7', 'E2F0D9', 'FFF2CC', 'FCE4D6', 'E4DFEC', 'DDEBF7', 'F8CBAD', 'EADCF8', 'D9EAD3', 'F4CCCC', 'D0E0E3', 'FFF0F5', 'EAF2F8', 'F9E79F', 'D5F5E3', 'FADBD8'];
+function getExportColorKey(item) {
+  if (!item) return '';
+  if (!isFixedSchedule(item) && item.subjectId) return `subject:${item.subjectId}`;
+  if (isFixedSubjectSchedule(item) && item.subjectId) return `subject:${item.subjectId}`;
+  if (isBatchSubjectSchedule(item)) return `batch:${item.displayTitle || item.title || 'Elective'}`;
+  if (isNonTeachingFixedSchedule(item)) return `fixed:${String(item.title || 'Fixed Activity').toLowerCase()}`;
+  return item.subjectId ? `subject:${item.subjectId}` : `item:${item.title || item.id}`;
+}
+function createSpreadsheetModel(sheetTitle = 'Weekly Schedules') {
+  return { rows: [], styles: {}, merges: [], colors: new Map(), rowHeights: {}, sheetTitle };
+}
+function spreadsheetCellKey(rowIndex, colIndex) { return `${rowIndex}:${colIndex}`; }
+function setSpreadsheetStyle(model, rowIndex, colIndex, styleIndex) { model.styles[spreadsheetCellKey(rowIndex, colIndex)] = styleIndex; }
+function setSpreadsheetRowHeight(model, rowIndex, height) { if (height) model.rowHeights[rowIndex] = height; }
+function addSpreadsheetRow(model, values, styleIndex = null, rowHeight = null) {
+  const rowIndex = model.rows.length;
+  model.rows.push(values);
+  if (styleIndex !== null) values.forEach((_, colIndex) => setSpreadsheetStyle(model, rowIndex, colIndex, styleIndex));
+  if (rowHeight) setSpreadsheetRowHeight(model, rowIndex, rowHeight);
+  return rowIndex;
+}
+function getExportStyleForItem(model, item) {
+  const key = getExportColorKey(item);
+  if (!key) return 0;
+  if (!model.colors.has(key)) model.colors.set(key, model.colors.size);
+  return 3 + model.colors.get(key);
+}
+function getExportColors(model) {
+  if (!model?.colors) return [];
+  return [...model.colors.entries()].sort((a, b) => a[1] - b[1]).map((_, index) => EXPORT_COLOR_PALETTE[index % EXPORT_COLOR_PALETTE.length]);
+}
+const EXPORT_TIMELINE_INCREMENT_MINUTES = 10;
+const EXPORT_TIMELINE_ROW_HEIGHT = 10;
+function floorToExportIncrement(minutes) {
+  return Math.floor(minutes / EXPORT_TIMELINE_INCREMENT_MINUTES) * EXPORT_TIMELINE_INCREMENT_MINUTES;
+}
+function ceilToExportIncrement(minutes) {
+  return Math.ceil(minutes / EXPORT_TIMELINE_INCREMENT_MINUTES) * EXPORT_TIMELINE_INCREMENT_MINUTES;
+}
+function getExportTimelineStarts(schedules = []) {
+  const startCandidates = DAYS.map(day => toMinutes(getDayTeachingStart(day))).concat(
+    schedules.map(item => toMinutes(item.start)).filter(Number.isFinite)
+  );
+  const endCandidates = DAYS.map(day => toMinutes(getDayEnd(day))).concat(
+    schedules.map(item => toMinutes(item.start) + Number(item.duration || 0)).filter(Number.isFinite)
+  );
+  const minStart = floorToExportIncrement(Math.min(...startCandidates.filter(Number.isFinite)));
+  const maxEnd = ceilToExportIncrement(Math.max(...endCandidates.filter(Number.isFinite)));
+  const starts = [];
+  for (let minute = minStart; minute < maxEnd; minute += EXPORT_TIMELINE_INCREMENT_MINUTES) starts.push(fromMinutes(minute));
+  return starts;
+}
+function findExportEndIndex(starts, endMinute) {
+  const index = starts.findIndex(start => toMinutes(start) >= endMinute);
+  return index >= 0 ? index : starts.length;
+}
+function addExportTimeColumn(model, starts, baseRowIndex) {
+  const endMinutes = starts.length ? toMinutes(starts[starts.length - 1]) + EXPORT_TIMELINE_INCREMENT_MINUTES : 0;
+  let index = 0;
+  while (index < starts.length) {
+    const startMinute = toMinutes(starts[index]);
+    const nextBoundary = startMinute % 60 === 0 ? startMinute + 60 : Math.min(Math.ceil(startMinute / 60) * 60, endMinutes);
+    const endIndex = Math.max(index + 1, findExportEndIndex(starts, nextBoundary));
+    const rowIndex = baseRowIndex + index;
+    model.rows[rowIndex][0] = formatTime(starts[index]);
+    setSpreadsheetStyle(model, rowIndex, 0, 1);
+    for (let r = rowIndex; r < baseRowIndex + endIndex; r += 1) setSpreadsheetStyle(model, r, 0, 1);
+    if (endIndex - index > 1) model.merges.push(`A${rowIndex + 1}:A${baseRowIndex + endIndex}`);
+    index = endIndex;
+  }
+}
+function placeExportEvents(model, schedules, timelineStarts, baseRowIndex, mode = 'section') {
+  const colByDay = { Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5 };
+  DAYS.forEach(day => {
+    const dayItems = schedules.filter(item => item.day === day).sort((a,b) => toMinutes(a.start) - toMinutes(b.start) || (isFixedSchedule(a) ? -1 : 1));
+    dayItems.forEach(item => {
+      const startIndex = timelineStarts.findIndex(start => start === item.start);
+      if (startIndex < 0) return;
+      const rowIndex = baseRowIndex + startIndex;
+      const colIndex = colByDay[day];
+      const endMinute = toMinutes(item.start) + Number(item.duration || 0);
+      const endIndex = findExportEndIndex(timelineStarts, endMinute);
+      const rowSpan = Math.max(1, endIndex - startIndex);
+      model.rows[rowIndex][colIndex] = getExportItemText(item, mode);
+      const styleIndex = getExportStyleForItem(model, item);
+      for (let r = rowIndex; r < rowIndex + rowSpan; r += 1) setSpreadsheetStyle(model, r, colIndex, styleIndex);
+      if (rowSpan > 1) {
+        const cellColumn = columnName(colIndex + 1);
+        model.merges.push(`${cellColumn}${rowIndex + 1}:${cellColumn}${rowIndex + rowSpan}`);
+      }
+    });
+  });
+}
+function getTeacherSchedulesForExport(teacherId) {
+  return getDisplayScheduleItems()
+    .filter(item => item.teacherId === teacherId)
+    .sort((a,b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || toMinutes(a.start) - toMinutes(b.start) || (isFixedSchedule(a) ? -1 : 1));
+}
+function buildWeeklySpreadsheetModel(entities, getSchedules, mode, title) {
+  const model = createSpreadsheetModel(title);
+  addSpreadsheetRow(model, [title], 2, 22);
+  model.merges.push(`A1:F1`);
+  addSpreadsheetRow(model, [`Generated: ${new Date().toLocaleString()}`], 0, 18);
+  model.merges.push(`A2:F2`);
+  addSpreadsheetRow(model, []);
+  sortByName(entities).forEach(entity => {
+    const schedules = getSchedules(entity.id);
+    const titleRow = addSpreadsheetRow(model, [entity.name, '', '', '', '', ''], 2, 22);
+    model.merges.push(`A${titleRow + 1}:F${titleRow + 1}`);
+    addSpreadsheetRow(model, ['Time','Monday','Tuesday','Wednesday','Thursday','Friday'], 1, 20);
+    const timelineStarts = getExportTimelineStarts(schedules);
+    const baseRowIndex = model.rows.length;
+    timelineStarts.forEach(() => {
+      const rowIndex = addSpreadsheetRow(model, ['', '', '', '', '', ''], null, EXPORT_TIMELINE_ROW_HEIGHT);
+      for (let c = 0; c < 6; c += 1) setSpreadsheetStyle(model, rowIndex, c, 0);
+    });
+    addExportTimeColumn(model, timelineStarts, baseRowIndex);
+    placeExportEvents(model, schedules, timelineStarts, baseRowIndex, mode);
+    addSpreadsheetRow(model, []);
+  });
+  return model;
 }
 function buildSectionSpreadsheetRows() {
-  const rows = [];
-  rows.push(['All Section Weekly Schedules']);
-  rows.push([`Generated: ${new Date().toLocaleString()}`]);
-  rows.push([]);
-  sortByName(data.sections).forEach(section => {
-    const schedules = getSectionSchedulesForExport(section.id);
-    rows.push([section.name]);
-    rows.push(['Monday Time','Monday','Tue-Fri Time','Tuesday','Wednesday','Thursday','Friday']);
-    const rowSets = getExportStartRows(schedules);
-    for (let i = 0; i < rowSets.maxRows; i += 1) {
-      const mondayStart = rowSets.monday[i] || '';
-      const weekdayStart = rowSets.weekdays[i] || '';
-      rows.push([
-        mondayStart ? timeRange(mondayStart, getBestExportDuration('Monday', mondayStart, schedules)) : '',
-        getExportCellText('Monday', mondayStart, schedules),
-        weekdayStart ? timeRange(weekdayStart, getBestExportDuration('Tuesday', weekdayStart, schedules)) : '',
-        getExportCellText('Tuesday', weekdayStart, schedules),
-        getExportCellText('Wednesday', weekdayStart, schedules),
-        getExportCellText('Thursday', weekdayStart, schedules),
-        getExportCellText('Friday', weekdayStart, schedules)
-      ]);
-    }
-    rows.push([]);
-  });
-  return rows;
+  return buildWeeklySpreadsheetModel(data.sections, getSectionSchedulesForExport, 'section', 'All Section Weekly Schedules');
+}
+function buildTeacherSpreadsheetRows() {
+  return buildWeeklySpreadsheetModel(data.teachers, getTeacherSchedulesForExport, 'teacher', 'All Teacher Weekly Schedules');
 }
 function columnName(index) {
   let name = '';
@@ -1570,20 +1714,68 @@ function columnName(index) {
   }
   return name;
 }
-function buildWorksheetXml(rows) {
+function buildWorksheetXml(input) {
+  const model = Array.isArray(input) ? { rows: input, styles: {}, merges: [], colors: new Map(), rowHeights: {} } : input;
+  const rows = model.rows || [];
+  const skipCells = new Set();
+  (model.merges || []).forEach(ref => {
+    const match = String(ref).match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
+    if (!match) return;
+    const startCol = columnLettersToNumber(match[1]);
+    const startRow = Number(match[2]);
+    const endCol = columnLettersToNumber(match[3]);
+    const endRow = Number(match[4]);
+    for (let r = startRow; r <= endRow; r += 1) {
+      for (let c = startCol; c <= endCol; c += 1) {
+        if (r === startRow && c === startCol) continue;
+        skipCells.add(`${r - 1}:${c - 1}`);
+      }
+    }
+  });
   const rowXml = rows.map((row, rIndex) => {
-    const cells = row.map((value, cIndex) => {
+    const cells = (row || []).map((value, cIndex) => {
+      if (skipCells.has(`${rIndex}:${cIndex}`)) return '';
       const ref = `${columnName(cIndex + 1)}${rIndex + 1}`;
-      const style = rIndex === 0 || (row.length === 1 && value) || row.includes('Monday Time') ? ' s="1"' : '';
+      const explicitStyle = model.styles?.[spreadsheetCellKey(rIndex, cIndex)];
+      const fallbackStyle = rIndex === 0 || (row.length === 1 && value) || row.includes('Time') ? 1 : 0;
+      const styleIndex = explicitStyle ?? fallbackStyle;
+      const style = styleIndex ? ` s="${styleIndex}"` : '';
       return `<c r="${ref}" t="inlineStr"${style}><is><t xml:space="preserve">${spreadsheetXmlEscape(value)}</t></is></c>`;
     }).join('');
-    return `<row r="${rIndex + 1}">${cells}</row>`;
+    const explicitHeight = model.rowHeights?.[rIndex];
+    const autoHeight = (row || []).some(value => String(value || '').includes('\n')) ? 48 : null;
+    const heightValue = explicitHeight || autoHeight;
+    const height = heightValue ? ` ht="${heightValue}" customHeight="1"` : '';
+    return `<row r="${rIndex + 1}"${height}>${cells}</row>`;
   }).join('');
+  const mergeXml = (model.merges || []).length ? `<mergeCells count="${model.merges.length}">${model.merges.map(ref => `<mergeCell ref="${ref}"/>`).join('')}</mergeCells>` : '';
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <cols><col min="1" max="7" width="24" customWidth="1"/></cols>
+  <cols><col min="1" max="1" width="14" customWidth="1"/><col min="2" max="6" width="32" customWidth="1"/></cols>
   <sheetData>${rowXml}</sheetData>
+  ${mergeXml}
 </worksheet>`;
+}
+function columnLettersToNumber(letters) {
+  return String(letters || '').split('').reduce((sum, char) => sum * 26 + (char.charCodeAt(0) - 64), 0);
+}
+function buildStylesXml(colors = []) {
+  const fills = colors.map(color => `<fill><patternFill patternType="solid"><fgColor rgb="FF${color}"/><bgColor indexed="64"/></patternFill></fill>`).join('');
+  const colorXfs = colors.map((_, index) => `<xf numFmtId="0" fontId="0" fillId="${index + 2}" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment wrapText="1" vertical="center" horizontal="center"/></xf>`).join('');
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>
+  <fills count="${2 + colors.length}"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>${fills}</fills>
+  <borders count="2"><border/><border><left style="thin"><color rgb="FFD9E2EF"/></left><right style="thin"><color rgb="FFD9E2EF"/></right><top style="thin"><color rgb="FFD9E2EF"/></top><bottom style="thin"><color rgb="FFD9E2EF"/></bottom></border></borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="${3 + colors.length}">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment wrapText="1" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment wrapText="1" vertical="center" horizontal="center"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment wrapText="1" vertical="center" horizontal="center"/></xf>
+    ${colorXfs}
+  </cellXfs>
+  <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>`;
 }
 function makeCrcTable() {
   const table = new Uint32Array(256);
@@ -1642,14 +1834,17 @@ function createZip(files) {
   writeUInt32LE(eocd, 12, centralDir.length); writeUInt32LE(eocd, 16, offset); writeUInt16LE(eocd, 20, 0);
   return concatUint8([...localChunks, centralDir, eocd]);
 }
-function createXlsxBlob(rows) {
+function createXlsxBlob(input) {
+  const model = Array.isArray(input) ? { rows: input, styles: {}, merges: [], colors: new Map(), rowHeights: {}, sheetTitle: 'Weekly Schedules' } : input;
+  const colors = getExportColors(model);
+  const sheetName = spreadsheetXmlEscape(model.sheetTitle || 'Weekly Schedules').slice(0, 31);
   const files = [
     { name: '[Content_Types].xml', content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>' },
     { name: '_rels/.rels', content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>' },
-    { name: 'xl/workbook.xml', content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Weekly Schedules" sheetId="1" r:id="rId1"/></sheets></workbook>' },
+    { name: 'xl/workbook.xml', content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${sheetName}" sheetId="1" r:id="rId1"/></sheets></workbook>` },
     { name: 'xl/_rels/workbook.xml.rels', content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>' },
-    { name: 'xl/styles.xml', content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs></styleSheet>' },
-    { name: 'xl/worksheets/sheet1.xml', content: buildWorksheetXml(rows) }
+    { name: 'xl/styles.xml', content: buildStylesXml(colors) },
+    { name: 'xl/worksheets/sheet1.xml', content: buildWorksheetXml(model) }
   ];
   return new Blob([createZip(files)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 }
@@ -1665,11 +1860,19 @@ function downloadBlob(blob, filename) {
 }
 function exportWeeklySpreadsheet() {
   if (!data.sections.length) return showAlert('Add sections first before exporting weekly schedules.', 'warning');
-  const rows = buildSectionSpreadsheetRows();
+  const model = buildSectionSpreadsheetRows();
   const date = new Date().toISOString().slice(0,10);
-  downloadBlob(createXlsxBlob(rows), `all-section-weekly-schedules-${date}.xlsx`);
-  showAlert('Weekly spreadsheet exported.');
+  downloadBlob(createXlsxBlob(model), `all-section-weekly-schedules-${date}.xlsx`);
+  showAlert('Weekly section spreadsheet exported with merged double/triple-period cells and subject colors.');
 }
+function exportTeacherSpreadsheet() {
+  if (!data.teachers.length) return showAlert('Add teachers first before exporting teacher weekly schedules.', 'warning');
+  const model = buildTeacherSpreadsheetRows();
+  const date = new Date().toISOString().slice(0,10);
+  downloadBlob(createXlsxBlob(model), `all-teacher-weekly-schedules-${date}.xlsx`);
+  showAlert('Weekly teacher spreadsheet exported.');
+}
+window.exportTeacherSpreadsheet = exportTeacherSpreadsheet;
 
 
 function normalizeCsvLookup(value) {
@@ -1735,7 +1938,8 @@ function downloadTeachingLoadTemplate() {
     ['teacher', 'subject', 'sections', 'meetings', 'duration', 'roomMode', 'room', 'teacherStart'],
     ['Santos', 'English 1', 'Grade 7 - Diamond; Grade 7 - Jade; Grade 7 - Ruby; Grade 7 - Sapphire', '4', '50', 'default', '', '07:30'],
     ['Reyes', 'Computer Science', 'Grade 7 - Diamond; Grade 7 - Jade', '2', '100', 'manual', 'ICT Laboratory', '08:00'],
-    ['Cruz', 'Science', 'Grade 8 - Pearl', '3', '50', 'auto', '', '07:30']
+    ['Cruz', 'Science', 'Grade 8 - Pearl', '3', '50', 'auto', '', '07:30'],
+    ['NT', 'SWP', 'Grade 7 - Diamond; Grade 7 - Jade; Grade 7 - Ruby; Grade 7 - Sapphire', '5', '30', 'default', '', '']
   ];
   downloadBlob(new Blob(['\uFEFF' + buildCsv(rows)], { type: 'text/csv;charset=utf-8' }), 'teaching-load-template.csv');
 }
@@ -1805,8 +2009,11 @@ async function importTeachingLoadsFromCsv() {
     if (!Number.isFinite(duration) || duration < 10) { errors.push(`Row ${rowNo}: duration must be at least 10 minutes.`); return; }
     if (!sectionNames.length) { errors.push(`Row ${rowNo}: add at least one section.`); return; }
 
-    const teacherResult = resolveCsvNamedItem('teachers', teacherName, { label: 'teacher', prefix: 'teacher', createMissing, startTime: teacherStart });
-    if (teacherResult.error) { errors.push(`Row ${rowNo}: ${teacherResult.error}`); return; }
+    const noTeacherLoad = isNoTeacherCsvValue(teacherName);
+    const teacherResult = noTeacherLoad
+      ? { item: { id: '' }, created: false }
+      : resolveCsvNamedItem('teachers', teacherName, { label: 'teacher', prefix: 'teacher', createMissing, startTime: teacherStart });
+    if (teacherResult.error) { errors.push(`Row ${rowNo}: ${teacherResult.error} Use NT for independent activities with no assigned teacher.`); return; }
     if (teacherResult.created) created.teachers++;
 
     const subjectResult = resolveCsvNamedItem('subjects', subjectName, { label: 'subject', prefix: 'subject', createMissing, duration });
@@ -1859,8 +2066,8 @@ async function importTeachingLoadsFromCsv() {
 }
 
 function validateCoreDataForScheduling() {
-  if (!data.sections.length || !data.subjects.length || !data.teachers.length) {
-    showAlert('Add at least one section, subject, and teacher first.', 'warning');
+  if (!data.sections.length || !data.subjects.length) {
+    showAlert('Add at least one section and subject first.', 'warning');
     return false;
   }
   return true;
@@ -1871,10 +2078,11 @@ function addTeachingLoad() {
   const roomMode = els.loadRoomMode.value || 'default';
   const duration = Number(els.loadDuration.value || 50);
   const meetings = Number(els.loadMeetings.value || 1);
-  const teacherId = els.loadTeacher.value;
+  const teacherValue = els.loadTeacher.value;
+  const teacherId = teacherSelectValueToId(teacherValue);
   const subjectId = els.loadSubject.value;
   const sectionIds = getSelectedLoadSections();
-  if (!teacherId) return showAlert('Choose a teacher first.', 'warning');
+  if (!teacherValue) return showAlert('Choose a teacher first, or choose No Teacher (NT) for independent student activities like SWP.', 'warning');
   if (!subjectId) return showAlert('Choose a subject.', 'warning');
   if (!sectionIds.length) return showAlert('Select at least one section for this teaching load.', 'warning');
   if (roomMode !== 'default' && !data.rooms.length) return showAlert('Add at least one laboratory/special room before assigning lab rooms.', 'warning');
@@ -1969,11 +2177,11 @@ function createWaitlistItem(load, meetingIndex, reason = 'No available conflict-
   };
 }
 function waitlistLabel(item) {
-  return `${byName(data.sections, item.sectionId)} · ${byName(data.subjects, item.subjectId)} · ${byName(data.teachers, item.teacherId)}`;
+  return `${byName(data.sections, item.sectionId)} · ${byName(data.subjects, item.subjectId)} · ${teacherName(item.teacherId)}`;
 }
 function renderWaitlistList() {
   if (!els.waitlistList) return;
-  const items = [...(data.scheduleWaitlist || [])].sort((a,b) => byName(data.teachers,a.teacherId).localeCompare(byName(data.teachers,b.teacherId)) || byName(data.sections,a.sectionId).localeCompare(byName(data.sections,b.sectionId)) || byName(data.subjects,a.subjectId).localeCompare(byName(data.subjects,b.subjectId)) || Number(a.meetingIndex || 0) - Number(b.meetingIndex || 0));
+  const items = [...(data.scheduleWaitlist || [])].sort((a,b) => teacherName(a.teacherId).localeCompare(teacherName(b.teacherId)) || byName(data.sections,a.sectionId).localeCompare(byName(data.sections,b.sectionId)) || byName(data.subjects,a.subjectId).localeCompare(byName(data.subjects,b.subjectId)) || Number(a.meetingIndex || 0) - Number(b.meetingIndex || 0));
   if (!items.length) {
     els.waitlistList.innerHTML = '<li><div><strong>No unplaced classes.</strong><br><small>Auto-generation will place unresolved classes here instead of discarding the whole generated schedule.</small></div></li>';
     return;
@@ -2019,7 +2227,7 @@ function loadWaitlistToForm(id) {
   resetScheduleFormMode({ reset: false });
   els.scheduleSection.value = item.sectionId || '';
   els.scheduleSubject.value = item.subjectId || '';
-  els.scheduleTeacher.value = item.teacherId || '';
+  els.scheduleTeacher.value = teacherIdToSelectValue(item.teacherId);
   els.scheduleDay.value = 'Monday';
   renderTimeOptions();
   els.scheduleDuration.value = item.duration || 50;
@@ -2072,6 +2280,7 @@ function getDayScore(day, schedules, load) {
   const classItems = getClassItemsOnly(schedules);
   const sectionCount = classItems.filter(item => item.day === day && item.sectionId === load.sectionId).length;
   const totalCount = classItems.filter(item => item.day === day).length;
+  if (!load.teacherId) return sectionCount * 10 + totalCount * 0.75;
   const teacherDayCount = getTeacherDayCount(schedules, load.teacherId, day);
   const teacherDayMinutes = getTeacherDayMinutes(schedules, load.teacherId, day);
   const teacherTotalMinutes = getTeacherTotalLoadMinutes(load.teacherId);
@@ -2087,7 +2296,7 @@ function getDayScore(day, schedules, load) {
   return sectionCount * 10 + teacherConcentrationPenalty + totalCount * 0.75 + newDaySpreadBonus + stillNeedsSpreadBonus;
 }
 function findSlotForLoad(load, schedules, meetingIndex, options = {}) {
-  const teacherStart = toMinutes(getTeacherStartTime(load.teacherId));
+  const teacherStart = load.teacherId ? toMinutes(getTeacherStartTime(load.teacherId)) : 0;
   const seed = Number(options.seed || 0);
   const sortedDays = [...DAYS].sort((a,b) => {
     const scoreA = getDayScore(a, schedules, load) + autoSortNoise(seed, `${load.id}:${load.sectionId}:${load.subjectId}:${meetingIndex}:${a}`, options.reshuffle ? 18 : 3);
@@ -2132,9 +2341,10 @@ function buildExpandedTeachingLoadMeetings() {
 }
 function getLoadGenerationPriority(load) {
   const roomPriority = mode => mode === 'manual' ? 0 : mode === 'auto' ? 1 : 2;
+  const hasTeacher = Boolean(load.teacherId);
   return (
-    getTeacherTotalLoadMinutes(load.teacherId) * -1 +
-    toMinutes(getTeacherStartTime(load.teacherId)) * 0.08 +
+    (hasTeacher ? getTeacherTotalLoadMinutes(load.teacherId) * -1 : 0) +
+    (hasTeacher ? toMinutes(getTeacherStartTime(load.teacherId)) * 0.08 : 120) +
     roomPriority(load.roomMode) * 250 +
     Number(load.duration || 50) * -2 +
     Number(load.meetings || 1) * -40
@@ -2161,7 +2371,7 @@ function sortExpandedLoadsForGeneration(expanded, options = {}) {
 function validateAutoGenerationInputs() {
   if (!validateCoreDataForScheduling()) return false;
   if (!data.teachingLoads.length) { showAlert('Add teaching loads first. The generator needs section, subject, teacher, meetings/week, duration, and room assignment rules.', 'warning'); return false; }
-  const invalidLoads = data.teachingLoads.filter(load => !data.sections.some(s => s.id === load.sectionId) || !data.subjects.some(s => s.id === load.subjectId) || !data.teachers.some(t => t.id === load.teacherId) || (load.roomMode === 'manual' && !data.rooms.some(r => r.id === load.roomId)));
+  const invalidLoads = data.teachingLoads.filter(load => !data.sections.some(s => s.id === load.sectionId) || !data.subjects.some(s => s.id === load.subjectId) || (load.teacherId && !data.teachers.some(t => t.id === load.teacherId)) || (load.roomMode === 'manual' && !data.rooms.some(r => r.id === load.roomId)));
   if (invalidLoads.length) { showAlert('Some teaching loads reference deleted sections, subjects, teachers, or rooms. Please delete and recreate those loads.', 'error'); return false; }
   if (data.teachingLoads.some(load => load.roomMode === 'auto' && !data.rooms.length)) { showAlert('At least one teaching load requires auto lab/room assignment, but no laboratory/special rooms have been added.', 'warning'); return false; }
   return true;
@@ -2453,7 +2663,7 @@ document.body.addEventListener('click', e => {
   if (duplicate) {
     const item = data.schedules.find(s => s.id === duplicate.dataset.duplicate); if (!item) return;
     clearEditMode('schedules'); setButtonText('scheduleSubmitBtn', 'Add'); setHidden('scheduleCancelEdit', true);
-    els.scheduleSection.value = item.sectionId; els.scheduleSubject.value = item.subjectId; els.scheduleTeacher.value = item.teacherId; els.scheduleDay.value = item.day; els.scheduleStart.value = item.start; els.scheduleDuration.value = item.duration; els.roomMode.value = item.roomMode || (isDefaultRoom(item.roomId) ? 'default' : 'manual'); els.manualRoomWrap.classList.toggle('hidden', els.roomMode.value !== 'manual'); if (els.roomMode.value === 'manual') els.manualRoom.value = item.roomId;
+    els.scheduleSection.value = item.sectionId; els.scheduleSubject.value = item.subjectId; els.scheduleTeacher.value = teacherIdToSelectValue(item.teacherId); els.scheduleDay.value = item.day; els.scheduleStart.value = item.start; els.scheduleDuration.value = item.duration; els.roomMode.value = item.roomMode || (isDefaultRoom(item.roomId) ? 'default' : 'manual'); els.manualRoomWrap.classList.toggle('hidden', els.roomMode.value !== 'manual'); if (els.roomMode.value === 'manual') els.manualRoom.value = item.roomId;
     window.scrollTo({ top: 0, behavior: 'smooth' }); showAlert('Schedule copied to the form. Adjust the time or day, then add it.', 'warning');
   }
 });
@@ -2472,6 +2682,7 @@ els.importFile.addEventListener('change', e => { const file = e.target.files[0];
 els.printBtn.addEventListener('click', () => window.print());
 if (els.exportSpreadsheetBtn) els.exportSpreadsheetBtn.addEventListener('click', exportWeeklySpreadsheet);
 if (els.exportSpreadsheetSideBtn) els.exportSpreadsheetSideBtn.addEventListener('click', exportWeeklySpreadsheet);
+if (els.exportTeacherSpreadsheetSideBtn) els.exportTeacherSpreadsheetSideBtn.addEventListener('click', exportTeacherSpreadsheet);
 if (els.browseSectionsBtn) els.browseSectionsBtn.addEventListener('click', () => openWeeklyBrowser('sections'));
 if (els.browseTeachersBtn) els.browseTeachersBtn.addEventListener('click', () => openWeeklyBrowser('teachers'));
 window.addEventListener('storage', e => {
