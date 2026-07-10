@@ -1084,6 +1084,7 @@ function renderSettings() {
   if (els.teacherStartTime && !els.teacherStartTime.value) els.teacherStartTime.value = data.settings.dayStart || defaultData.settings.dayStart;
 }
 function renderScheduleFilters() {
+  if (!els.filterSection) return;
   const previous = els.filterSection.value || 'all';
   els.filterSection.innerHTML = '<option value="all">All Sections</option>' + sortByName(data.sections).map(section => `<option value="${escapeHtml(section.id)}">${escapeHtml(section.name)}</option>`).join('');
   els.filterSection.value = [...els.filterSection.options].some(opt => opt.value === previous) ? previous : 'all';
@@ -1447,10 +1448,23 @@ function deleteFixedActivity(id) {
   data.fixedActivities = data.fixedActivities.filter(activity => activity.id !== id);
   saveData(); renderAll(); showAlert('Fixed activity deleted.');
 }
+function renderScheduleEmptyState(message) {
+  if (!els.scheduleTable) return;
+  els.scheduleTable.innerHTML = `<tr><td colspan="7" class="empty-state">${escapeHtml(message)}</td></tr>`;
+}
 function renderScheduleTable() {
+  // Performance guard: do not render the full master table by default.
+  // With 500+ classes, the dashboard should only populate this table after
+  // the user narrows it by section and/or day.
+  if (!els.scheduleTable || !els.filterSection || !els.filterDay) return;
   const sectionFilter = els.filterSection.value || 'all';
   const dayFilter = els.filterDay.value || 'all';
   const includeFixed = Boolean(els.showFixedSchedules?.checked);
+  const hasActiveTableFilter = sectionFilter !== 'all' || dayFilter !== 'all';
+  if (!hasActiveTableFilter) {
+    renderScheduleEmptyState('Select a section or day filter to display the Master Schedule.');
+    return;
+  }
   const schedules = [...getDisplayScheduleItems()]
     .filter(item => includeFixed || isClassLikeSchedule(item))
     .filter(item => !isBatchSubjectSchedule(item) || item.sectionId)
@@ -1458,7 +1472,7 @@ function renderScheduleTable() {
     .filter(item => dayFilter === 'all' || item.day === dayFilter)
     .sort((a,b) => byName(data.sections,a.sectionId).localeCompare(byName(data.sections,b.sectionId)) || DAYS.indexOf(a.day)-DAYS.indexOf(b.day) || toMinutes(a.start)-toMinutes(b.start) || (isFixedSchedule(a) ? -1 : 1));
   els.scheduleTable.innerHTML = '';
-  if (!schedules.length) { els.scheduleTable.appendChild($('emptyRowTemplate').content.cloneNode(true)); return; }
+  if (!schedules.length) { renderScheduleEmptyState('No matching schedule entries found for the selected filters.'); return; }
   schedules.forEach(item => {
     const fixed = isFixedSchedule(item);
     const fixedSubject = isFixedTeachingSchedule(item);
@@ -2779,7 +2793,9 @@ document.body.addEventListener('change', e => {
   if (conflicts.length) { schedule.roomId = oldRoom; schedule.roomMode = oldMode; sel.value = oldRoom; return showAlert(conflicts[0], 'error'); }
   saveData(); renderScheduleTable(); showAlert(`Room updated to ${roomName(schedule.roomId)}.`);
 });
-els.filterSection.addEventListener('change', renderScheduleTable); els.filterDay.addEventListener('change', renderScheduleTable); if (els.showFixedSchedules) els.showFixedSchedules.addEventListener('change', renderScheduleTable);
+if (els.filterSection) els.filterSection.addEventListener('change', renderScheduleTable);
+if (els.filterDay) els.filterDay.addEventListener('change', renderScheduleTable);
+if (els.showFixedSchedules) els.showFixedSchedules.addEventListener('change', renderScheduleTable);
 els.exportBtn.addEventListener('click', () => { const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `class-schedule-backup-${new Date().toISOString().slice(0,10)}.json`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); });
 els.importFile.addEventListener('change', e => { const file = e.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => { try { const imported = normalizeData(JSON.parse(reader.result)); data = imported; saveData(); renderAll(); showAlert('Backup imported successfully.'); } catch { showAlert('Import failed. Please choose a valid scheduler backup JSON file.', 'error'); } }; reader.readAsText(file); e.target.value = ''; });
 els.printBtn.addEventListener('click', () => window.print());

@@ -3,8 +3,40 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Offline Class Scheduler</title>
+  <title>Class Scheduler</title>
   <link rel="stylesheet" href="style.css" />
+
+  <style>
+    .control-action-btn {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      text-align: left;
+    }
+    .control-action-icon {
+      flex: 0 0 2.2rem;
+      width: 2.2rem;
+      height: 2.2rem;
+      border-radius: 0.85rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(37, 99, 235, 0.10);
+      color: #1d4ed8;
+      font-size: 1.15rem;
+      line-height: 1;
+    }
+    .control-action-copy {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.1rem;
+    }
+    .control-action-copy span,
+    .control-action-copy small {
+      display: block;
+    }
+  </style>
 </head>
 <body>
   <header class="app-header">
@@ -171,6 +203,7 @@
           <div>
             <p class="eyebrow">Output</p>
             <h2>Master Schedule</h2>
+            <p class="hint">For faster loading, the table stays empty until you choose a section or day filter.</p>
           </div>
           <div class="filters output-filters">
             <label class="checkbox-row output-filter-check">
@@ -221,56 +254,95 @@
 
       <div class="control-button-grid" role="list" aria-label="Open scheduler modules">
         <button type="button" class="control-action-btn" data-control-open="settings" role="listitem">
-          <span>School Day Settings</span>
-          <small>Slots, start, and end time</small>
+          <span class="control-action-icon" aria-hidden="true">⚙️</span>
+          <span class="control-action-copy">
+            <span>School Day Settings</span>
+            <small>Slots, start, and end time</small>
+          </span>
         </button>
         <button type="button" class="control-action-btn" data-control-open="sections" role="listitem">
-          <span>Add / View Sections</span>
-          <small id="sectionButtonCount">0 sections</small>
+          <span class="control-action-icon" aria-hidden="true">👥</span>
+          <span class="control-action-copy">
+            <span>Add / View Sections</span>
+            <small id="sectionButtonCount">0 sections</small>
+          </span>
         </button>
         <button type="button" class="control-action-btn" data-control-open="subjects" role="listitem">
-          <span>Add / View Subjects</span>
-          <small id="subjectButtonCount">0 subjects</small>
+          <span class="control-action-icon" aria-hidden="true">📚</span>
+          <span class="control-action-copy">
+            <span>Add / View Subjects</span>
+            <small id="subjectButtonCount">0 subjects</small>
+          </span>
         </button>
         <button type="button" class="control-action-btn" data-control-open="teachers" role="listitem">
-          <span>Add / View Teachers</span>
-          <small id="teacherButtonCount">0 teachers</small>
+          <span class="control-action-icon" aria-hidden="true">👨‍🏫</span>
+          <span class="control-action-copy">
+            <span>Add / View Teachers</span>
+            <small id="teacherButtonCount">0 teachers</small>
+          </span>
         </button>
         <button type="button" class="control-action-btn" data-control-open="rooms" role="listitem">
-          <span>Add / View Rooms</span>
-          <small id="roomButtonCount">0 rooms</small>
+          <span class="control-action-icon" aria-hidden="true">🏫</span>
+          <span class="control-action-copy">
+            <span>Add / View Rooms</span>
+            <small id="roomButtonCount">0 rooms</small>
+          </span>
         </button>
         <button type="button" class="control-action-btn" data-control-open="fixed" role="listitem">
-          <span>Lunch / Fixed Activities</span>
-          <small id="fixedButtonCount">0 fixed activities</small>
+          <span class="control-action-icon" aria-hidden="true">📌</span>
+          <span class="control-action-copy">
+            <span>Lunch / Fixed Activities</span>
+            <small id="fixedButtonCount">0 fixed activities</small>
+          </span>
         </button>
         <button type="button" class="control-action-btn" data-control-open="loads" role="listitem">
-          <span>Teaching Loads</span>
-          <small id="loadButtonCount">0 teaching loads</small>
+          <span class="control-action-icon" aria-hidden="true">🧾</span>
+          <span class="control-action-copy">
+            <span>Teaching Loads</span>
+            <small id="loadButtonCount">0 teaching loads</small>
+          </span>
         </button>
         <button type="button" class="control-action-btn" data-control-open="waitlist" role="listitem">
-          <span>Waitlist / Queue</span>
-          <small id="waitlistButtonCount">0 unplaced classes</small>
+          <span class="control-action-icon" aria-hidden="true">⏳</span>
+          <span class="control-action-copy">
+            <span>Waitlist / Queue</span>
+            <small id="waitlistButtonCount">0 unplaced classes</small>
+          </span>
         </button>
         <button type="button" class="control-action-btn" data-control-open="sync" role="listitem">
-          <span>MongoDB Sync</span>
-          <small id="syncButtonStatus">Local mode</small>
+          <span class="control-action-icon" aria-hidden="true">☁️</span>
+          <span class="control-action-copy">
+            <span>MongoDB Sync</span>
+            <small id="syncButtonStatus">Local mode</small>
+          </span>
         </button>
         <button type="button" id="browseSectionsBtn" class="control-action-btn" role="listitem">
-          <span>Browse Section Schedules</span>
-          <small>Open searchable section calendar tab</small>
+          <span class="control-action-icon" aria-hidden="true">🗂️</span>
+          <span class="control-action-copy">
+            <span>Browse Section Schedules</span>
+            <small>Open searchable section calendar tab</small>
+          </span>
         </button>
         <button type="button" id="browseTeachersBtn" class="control-action-btn" role="listitem">
-          <span>Browse Teacher Schedules</span>
-          <small>Open teacher weekly checker tab</small>
+          <span class="control-action-icon" aria-hidden="true">👓</span>
+          <span class="control-action-copy">
+            <span>Browse Teacher Schedules</span>
+            <small>Open teacher weekly checker tab</small>
+          </span>
         </button>
         <button type="button" id="exportSpreadsheetSideBtn" class="control-action-btn" role="listitem">
-          <span>Export Section Schedules XLSX</span>
-          <small>All section schedules in one XLSX</small>
+          <span class="control-action-icon" aria-hidden="true">📊</span>
+          <span class="control-action-copy">
+            <span>Export Section Schedules XLSX</span>
+            <small>All section schedules in one XLSX</small>
+          </span>
         </button>
         <button type="button" id="exportTeacherSpreadsheetSideBtn" class="control-action-btn" role="listitem">
-          <span>Export Teacher Schedules XLSX</span>
-          <small>All teacher schedules in one XLSX</small>
+          <span class="control-action-icon" aria-hidden="true">📤</span>
+          <span class="control-action-copy">
+            <span>Export Teacher Schedules XLSX</span>
+            <small>All teacher schedules in one XLSX</small>
+          </span>
         </button>
       </div>
     </aside>
@@ -675,7 +747,7 @@
 
   <template id="emptyRowTemplate">
     <tr>
-      <td colspan="7" class="empty-state">No schedule yet. Add sections, subjects, teachers, and rooms first.</td>
+      <td colspan="7" class="empty-state">No matching schedule entries found for the selected filters.</td>
     </tr>
   </template>
 
