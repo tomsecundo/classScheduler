@@ -156,7 +156,7 @@
             <button id="scheduleSubmitBtn" type="submit" class="primary">Add</button>
             <button type="button" id="autoGenerateBtn" class="success">Auto Generate Week</button>
             <button type="button" id="reshuffleScheduleBtn" class="secondary">Generate Again</button>
-            <button type="button" id="perfectScheduleBtn" class="success">Try Until Perfect</button>
+            <button type="button" id="perfectScheduleBtn" class="warning">Try Until Perfect</button>
             <button type="button" id="masterResetScheduleBtn" class="danger">Master Reset Weekly Schedule</button>
             <button type="button" id="clearScheduleForm" class="secondary">Clear</button>
             <button type="button" id="scheduleCancelEdit" class="secondary hidden">Cancel Edit</button>
@@ -246,11 +246,7 @@
     </div>
 
     <aside class="side-panel no-print" aria-label="Scheduler controls">
-      <div class="side-panel-header">
-        <p class="eyebrow">Control Panel</p>
-        <h2>Quick Actions</h2>
-        <p class="hint">Open each module in a focused dialog so the dashboard stays clean.</p>
-      </div>
+      
 
       <div class="control-button-grid" role="list" aria-label="Open scheduler modules">
         <button type="button" class="control-action-btn" data-control-open="settings" role="listitem">
@@ -342,6 +338,20 @@
           <span class="control-action-copy">
             <span>Export Teacher Schedules XLSX</span>
             <small>All teacher schedules in one XLSX</small>
+          </span>
+        </button>
+        <button type="button" id="exportScheduleCsvSideBtn" class="control-action-btn" role="listitem">
+          <span class="control-action-icon" aria-hidden="true">🧾</span>
+          <span class="control-action-copy">
+            <span>Export Schedule CSV</span>
+            <small>All schedule entries as CSV</small>
+          </span>
+        </button>
+        <button type="button" id="exportScheduleJsonSideBtn" class="control-action-btn" role="listitem">
+          <span class="control-action-icon" aria-hidden="true">🗄️</span>
+          <span class="control-action-copy">
+            <span>Export Schedule JSON</span>
+            <small>Schedule-only data for sharing</small>
           </span>
         </button>
       </div>
@@ -740,7 +750,7 @@
           </div>
         </form>
         <p id="syncStatus" class="sync-status muted">Server sync is off. Data is saved locally in this browser.</p>
-        <p class="hint">Use the Node/MongoDB server included in the ZIP. For same-server hosting, leave the URL blank or use the server origin.</p>
+        
       </div>
     </section>
   </div>

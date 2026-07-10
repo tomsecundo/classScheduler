@@ -42,7 +42,7 @@ const els = {
   loadSubject: $('loadSubject'), loadTeacher: $('loadTeacher'), loadMeetings: $('loadMeetings'), loadDuration: $('loadDuration'), loadRoomMode: $('loadRoomMode'), loadManualRoomWrap: $('loadManualRoomWrap'), loadManualRoom: $('loadManualRoom'), teachingLoadList: $('teachingLoadList'), replaceExistingSchedule: $('replaceExistingSchedule'), loadSectionChoices: $('loadSectionChoices'), loadSectionFilter: $('loadSectionFilter'), loadSelectAllSections: $('loadSelectAllSections'), loadClearSections: $('loadClearSections'), loadSelectMatchingSections: $('loadSelectMatchingSections'), loadCsvFile: $('loadCsvFile'), loadCsvImportBtn: $('loadCsvImportBtn'), loadCsvTemplateBtn: $('loadCsvTemplateBtn'), loadCsvCreateMissing: $('loadCsvCreateMissing'), resetTeachingLoadsBtn: $('resetTeachingLoadsBtn'),
   fixedActivityForm: $('fixedActivityForm'), fixedType: $('fixedType'), fixedTitle: $('fixedTitle'), fixedSubjectFields: $('fixedSubjectFields'), fixedBatchFields: $('fixedBatchFields'), fixedSubject: $('fixedSubject'), fixedTeacher: $('fixedTeacher'), fixedTeacherFilter: $('fixedTeacherFilter'), fixedTeacherChoices: $('fixedTeacherChoices'), fixedTeacherSelectMatching: $('fixedTeacherSelectMatching'), fixedTeacherSelectAll: $('fixedTeacherSelectAll'), fixedTeacherClear: $('fixedTeacherClear'), fixedOfferingList: $('fixedOfferingList'), fixedAddOffering: $('fixedAddOffering'), fixedRoomMode: $('fixedRoomMode'), fixedManualRoomWrap: $('fixedManualRoomWrap'), fixedManualRoom: $('fixedManualRoom'), fixedStart: $('fixedStart'), fixedDuration: $('fixedDuration'), fixedSectionFilter: $('fixedSectionFilter'), fixedSectionChoices: $('fixedSectionChoices'), fixedActivityList: $('fixedActivityList'), fixedLunchPreset: $('fixedLunchPreset'), fixedSwpPreset: $('fixedSwpPreset'), fixedFlagCeremonyPreset: $('fixedFlagCeremonyPreset'), fixedFlagRetreatPreset: $('fixedFlagRetreatPreset'), fixedSelectAllSections: $('fixedSelectAllSections'), fixedClearSections: $('fixedClearSections'), fixedSelectMatchingSections: $('fixedSelectMatchingSections'),
   sectionList: $('sectionList'), subjectList: $('subjectList'), teacherList: $('teacherList'), roomList: $('roomList'), scheduleTable: $('scheduleTable'), filterSection: $('filterSection'), filterDay: $('filterDay'), showFixedSchedules: $('showFixedSchedules'),
-  dayStart: $('dayStart'), dayEnd: $('dayEnd'), slotDuration: $('slotDuration'), dayStartMonday: $('dayStartMonday'), dayStartTuesday: $('dayStartTuesday'), dayStartWednesday: $('dayStartWednesday'), dayStartThursday: $('dayStartThursday'), dayStartFriday: $('dayStartFriday'), mondayFlagPatternBtn: $('mondayFlagPatternBtn'), importFile: $('importFile'), exportBtn: $('exportBtn'), printBtn: $('printBtn'), exportSpreadsheetBtn: $('exportSpreadsheetBtn'), exportSpreadsheetSideBtn: $('exportSpreadsheetSideBtn'), exportTeacherSpreadsheetSideBtn: $('exportTeacherSpreadsheetSideBtn'), browseSectionsBtn: $('browseSectionsBtn'), browseTeachersBtn: $('browseTeachersBtn'), clearScheduleForm: $('clearScheduleForm'), autoGenerateBtn: $('autoGenerateBtn'), reshuffleScheduleBtn: $('reshuffleScheduleBtn'), perfectScheduleBtn: $('perfectScheduleBtn'), masterResetScheduleBtn: $('masterResetScheduleBtn'), generationProgress: $('generationProgress'), generationProgressTitle: $('generationProgressTitle'), generationProgressCount: $('generationProgressCount'), generationProgressBar: $('generationProgressBar'), generationProgressDetail: $('generationProgressDetail'),
+  dayStart: $('dayStart'), dayEnd: $('dayEnd'), slotDuration: $('slotDuration'), dayStartMonday: $('dayStartMonday'), dayStartTuesday: $('dayStartTuesday'), dayStartWednesday: $('dayStartWednesday'), dayStartThursday: $('dayStartThursday'), dayStartFriday: $('dayStartFriday'), mondayFlagPatternBtn: $('mondayFlagPatternBtn'), importFile: $('importFile'), exportBtn: $('exportBtn'), printBtn: $('printBtn'), exportSpreadsheetBtn: $('exportSpreadsheetBtn'), exportSpreadsheetSideBtn: $('exportSpreadsheetSideBtn'), exportTeacherSpreadsheetSideBtn: $('exportTeacherSpreadsheetSideBtn'), exportScheduleCsvSideBtn: $('exportScheduleCsvSideBtn'), exportScheduleJsonSideBtn: $('exportScheduleJsonSideBtn'), exportScheduleCsvTopBtn: $('exportScheduleCsvTopBtn'), exportScheduleJsonTopBtn: $('exportScheduleJsonTopBtn'), exportScheduleCsvHeaderBtn: $('exportScheduleCsvHeaderBtn'), exportScheduleJsonHeaderBtn: $('exportScheduleJsonHeaderBtn'), browseSectionsBtn: $('browseSectionsBtn'), browseTeachersBtn: $('browseTeachersBtn'), clearScheduleForm: $('clearScheduleForm'), autoGenerateBtn: $('autoGenerateBtn'), reshuffleScheduleBtn: $('reshuffleScheduleBtn'), perfectScheduleBtn: $('perfectScheduleBtn'), masterResetScheduleBtn: $('masterResetScheduleBtn'), generationProgress: $('generationProgress'), generationProgressTitle: $('generationProgressTitle'), generationProgressCount: $('generationProgressCount'), generationProgressBar: $('generationProgressBar'), generationProgressDetail: $('generationProgressDetail'),
   syncEnabled: $('syncEnabled'), apiBaseUrl: $('apiBaseUrl'), syncStatus: $('syncStatus'), syncPullBtn: $('syncPullBtn'), syncPushBtn: $('syncPushBtn'), serverRevision: $('serverRevision'),
   statScheduledClasses: $('statScheduledClasses'), statTeachers: $('statTeachers'), statStudents: $('statStudents'), statSubjects: $('statSubjects'), statRooms: $('statRooms'),
   sectionCount: $('sectionCount'), subjectCount: $('subjectCount'), teacherCount: $('teacherCount'), roomCount: $('roomCount'), fixedCount: $('fixedCount'), loadCount: $('loadCount'),
@@ -1462,7 +1462,7 @@ function renderScheduleTable() {
   const includeFixed = Boolean(els.showFixedSchedules?.checked);
   const hasActiveTableFilter = sectionFilter !== 'all' || dayFilter !== 'all';
   if (!hasActiveTableFilter) {
-    renderScheduleEmptyState('Select a section or day filter to display the Master Schedule.');
+    renderScheduleEmptyState('Select a section or day filter to display the Master Schedule. This keeps the dashboard fast with large datasets.');
     return;
   }
   const schedules = [...getDisplayScheduleItems()]
@@ -1984,6 +1984,117 @@ function exportTeacherSpreadsheet() {
   showAlert('Weekly teacher spreadsheet exported.');
 }
 window.exportTeacherSpreadsheet = exportTeacherSpreadsheet;
+
+function getScheduleExportType(item) {
+  if (isBatchSubjectSchedule(item)) return item.sectionId ? 'Batch Subject Section Block' : 'Batch Subject Teacher Offering';
+  if (isFixedSubjectSchedule(item)) return 'Fixed Subject';
+  if (isNonTeachingFixedSchedule(item)) return 'Fixed Activity';
+  if (isFixedSchedule(item)) return 'Fixed Schedule';
+  return 'Class';
+}
+function getScheduleExportTitle(item) {
+  if (!item) return '';
+  if (isFixedTeachingSchedule(item)) return getFixedDisplayTitle(item);
+  if (isFixedSchedule(item)) return item.title || 'Fixed Activity';
+  return byName(data.subjects, item.subjectId);
+}
+function getScheduleExportTeacherName(teacherId) {
+  return isNoTeacherId(teacherId) ? '' : teacherName(teacherId);
+}
+function scheduleItemToExportObject(item, status = 'Scheduled') {
+  const start = item.start || '';
+  const duration = Number(item.duration || 0);
+  const end = start ? getEndTime(start, duration) : '';
+  return {
+    id: item.id || '',
+    status,
+    type: getScheduleExportType(item),
+    section: item.sectionId ? byName(data.sections, item.sectionId) : '',
+    subjectOrActivity: getScheduleExportTitle(item),
+    teacher: getScheduleExportTeacherName(item.teacherId),
+    day: item.day || '',
+    start: start ? formatTime(start) : '',
+    end: end ? formatTime(end) : '',
+    time: start ? timeRange(start, duration) : '',
+    durationMinutes: duration || '',
+    room: roomName(item.roomId),
+    roomMode: item.roomMode || '',
+    protected: isFixedSchedule(item) ? 'Yes' : 'No',
+    category: item.category || '',
+    sourceId: item.fixedActivityId || item.sourceLoadId || '',
+    reason: item.reason || ''
+  };
+}
+function waitlistItemToExportObject(item) {
+  return {
+    id: item.id || '',
+    status: 'Waitlisted',
+    type: 'Unplaced Class',
+    section: byName(data.sections, item.sectionId),
+    subjectOrActivity: byName(data.subjects, item.subjectId),
+    teacher: getScheduleExportTeacherName(item.teacherId),
+    day: '',
+    start: '',
+    end: '',
+    time: '',
+    durationMinutes: Number(item.duration || data.settings.slotDuration || 50),
+    room: loadRoomLabel(item),
+    roomMode: item.roomMode || '',
+    protected: 'No',
+    category: '',
+    sourceId: item.loadId || item.sourceLoadId || '',
+    reason: item.reason || 'Unplaced class'
+  };
+}
+function getScheduleExportObjects() {
+  const scheduled = getDisplayScheduleItems()
+    .slice()
+    .sort((a,b) => DAYS.indexOf(a.day)-DAYS.indexOf(b.day) || toMinutes(a.start)-toMinutes(b.start) || byName(data.sections,a.sectionId).localeCompare(byName(data.sections,b.sectionId)) || getScheduleExportTitle(a).localeCompare(getScheduleExportTitle(b)))
+    .map(item => scheduleItemToExportObject(item));
+  const waitlisted = (data.scheduleWaitlist || []).map(waitlistItemToExportObject);
+  return [...scheduled, ...waitlisted];
+}
+function escapeCsvValue(value) {
+  const text = String(value ?? '');
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+function exportScheduleCsv() {
+  const rows = getScheduleExportObjects();
+  if (!rows.length) return showAlert('No schedule entries available to export.', 'warning');
+  const headers = ['Status','Type','Section','Subject / Activity','Teacher','Day','Start','End','Time','Duration Minutes','Room','Room Mode','Protected','ID','Source ID','Reason'];
+  const keys = ['status','type','section','subjectOrActivity','teacher','day','start','end','time','durationMinutes','room','roomMode','protected','id','sourceId','reason'];
+  const csv = [headers.map(escapeCsvValue).join(',')]
+    .concat(rows.map(row => keys.map(key => escapeCsvValue(row[key])).join(',')))
+    .join('\n');
+  const date = new Date().toISOString().slice(0,10);
+  downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `all-schedules-${date}.csv`);
+  showAlert('Full schedule CSV exported.');
+}
+function exportScheduleJson() {
+  const rows = getScheduleExportObjects();
+  if (!rows.length) return showAlert('No schedule entries available to export.', 'warning');
+  const payload = {
+    generatedAt: new Date().toISOString(),
+    summary: {
+      scheduledEntries: getDisplayScheduleItems().length,
+      classLikeEntries: getUniqueClassItems(getDisplayScheduleItems()).length,
+      waitlistedEntries: (data.scheduleWaitlist || []).length,
+      sections: data.sections.length,
+      teachers: data.teachers.length,
+      subjects: data.subjects.length,
+      rooms: data.rooms.length
+    },
+    schedules: rows,
+    raw: {
+      schedules: data.schedules || [],
+      fixedActivities: data.fixedActivities || [],
+      scheduleWaitlist: data.scheduleWaitlist || []
+    }
+  };
+  const date = new Date().toISOString().slice(0,10);
+  downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' }), `all-schedules-${date}.json`);
+  showAlert('Full schedule JSON exported.');
+}
 
 
 function normalizeCsvLookup(value) {
@@ -2802,6 +2913,12 @@ els.printBtn.addEventListener('click', () => window.print());
 if (els.exportSpreadsheetBtn) els.exportSpreadsheetBtn.addEventListener('click', exportWeeklySpreadsheet);
 if (els.exportSpreadsheetSideBtn) els.exportSpreadsheetSideBtn.addEventListener('click', exportWeeklySpreadsheet);
 if (els.exportTeacherSpreadsheetSideBtn) els.exportTeacherSpreadsheetSideBtn.addEventListener('click', exportTeacherSpreadsheet);
+[els.exportScheduleCsvSideBtn, els.exportScheduleCsvTopBtn, els.exportScheduleCsvHeaderBtn]
+  .filter(Boolean)
+  .forEach(btn => btn.addEventListener('click', exportScheduleCsv));
+[els.exportScheduleJsonSideBtn, els.exportScheduleJsonTopBtn, els.exportScheduleJsonHeaderBtn]
+  .filter(Boolean)
+  .forEach(btn => btn.addEventListener('click', exportScheduleJson));
 if (els.browseSectionsBtn) els.browseSectionsBtn.addEventListener('click', () => openWeeklyBrowser('sections'));
 if (els.browseTeachersBtn) els.browseTeachersBtn.addEventListener('click', () => openWeeklyBrowser('teachers'));
 window.addEventListener('storage', e => {
