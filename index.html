@@ -603,6 +603,32 @@
           <button id="fixedSubmitBtn" type="submit" class="primary">Add Fixed Activity</button>
           <button id="fixedCancelEdit" type="button" class="secondary hidden">Cancel Edit</button>
         </form>
+
+        <section class="csv-import-card" aria-label="Import fixed activities from CSV">
+          <div class="csv-import-header">
+            <div>
+              <p class="eyebrow">Bulk Upload</p>
+              <h3>Import Fixed Activities from CSV</h3>
+            </div>
+            <div class="inline-actions">
+              <button id="fixedClearAllBtn" type="button" class="danger compact-btn">Clear Fixed Schedules</button>
+              <button id="fixedCsvTemplateBtn" type="button" class="secondary compact-btn">Download Template</button>
+            </div>
+          </div>
+          <div class="csv-import-grid">
+            <label>
+              CSV File
+              <input type="file" id="fixedCsvFile" accept=".csv,text/csv" />
+            </label>
+            <label class="checkbox-row csv-checkbox">
+              <input type="checkbox" id="fixedCsvCreateMissing" checked />
+              Create missing teachers, subjects, sections, and rooms from CSV
+            </label>
+            <button id="fixedCsvImportBtn" type="button" class="primary">Import Fixed Activities</button>
+          </div>
+          <p class="hint">CSV columns: <strong>key, type, title, days, start, duration, sections, subject, teacher, roomMode, room, offeringTitle, teacherStart</strong>. Types may be <code>activity</code>, <code>subject</code>, or <code>batch</code>. Use semicolons or vertical bars for multiple days and sections. Use <code>ALL</code> for every section. Batch rows sharing the same key are combined into one protected block with multiple teacher/room offerings.</p>
+        </section>
+
         <ul id="fixedActivityList" class="item-list modal-list"></ul>
         <p class="hint">Fixed activities are protected blocks. Fixed subjects are for one shared class. Batch-wide blocks are for electives/research where sections see only the general label while assigned teachers are still booked.</p>
       </div>
@@ -708,13 +734,13 @@
         <div>
           <p class="eyebrow">Manual Follow-up</p>
           <h2 id="controlTitle-waitlist">Waitlist / Queue</h2>
-          <p class="hint">Unplaced classes are kept here after auto-generation. Load one into the main form, try auto-place, or clear items once resolved.</p>
+          <p class="hint">Unplaced classes are kept here after auto-generation. Waitlist loading and auto-placement may exceed the teacher four-classes-per-day cap while retaining all collision, lunch, fixed-activity, start-time, and school-hour protections.</p>
         </div>
         <span id="waitlistCount" class="count-pill">0 unplaced</span>
       </div>
       <div class="control-modal-body">
         <div class="inline-actions waitlist-toolbar">
-          <button type="button" id="tryPlaceWaitlistBtn" class="secondary">Try Place All</button>
+          <button type="button" id="tryPlaceWaitlistBtn" class="secondary">Try Place All (Allow &gt;4/day)</button>
           <button type="button" id="clearWaitlistBtn" class="danger">Clear Waitlist</button>
         </div>
         <ul id="waitlistList" class="item-list modal-list waitlist-list"></ul>

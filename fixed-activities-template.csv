@@ -1,0 +1,6 @@
+key,type,title,days,start,duration,sections,subject,teacher,roomMode,room,offeringTitle,teacherStart
+lunch-all,activity,Lunch Break,Monday;Tuesday;Wednesday;Thursday;Friday,12:00,60,ALL,,,,,,
+flag-ceremony,activity,Flag Ceremony,Monday,07:30,20,ALL,,,,,,
+homeroom-g7,subject,Homeroom Guidance,Monday,07:50,50,Grade 7 - Diamond; Grade 7 - Jade,Homeroom Guidance,Santos,default,,,07:30
+elective-g10,batch,Elective,Wednesday,13:40,100,Grade 10 - Diamond; Grade 10 - Jade,,Reyes,manual,ICT Laboratory,Drone Technology,07:30
+elective-g10,batch,Elective,Wednesday,13:40,100,Grade 10 - Diamond; Grade 10 - Jade,,Cruz,manual,Electronics Laboratory,Advanced Technology,07:30

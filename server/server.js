@@ -105,6 +105,37 @@ async function main() {
     }
   });
 
+  app.patch('/api/scheduler/generated-schedule', async (req, res, next) => {
+    try {
+      const schedules = Array.isArray(req.body?.schedules) ? req.body.schedules : [];
+      const scheduleWaitlist = Array.isArray(req.body?.scheduleWaitlist) ? req.body.scheduleWaitlist : [];
+      const generatorRun = Number(req.body?.generatorRun || 0);
+      const expectedRevision = req.body?.expectedRevision;
+      const doc = await getSchedulerDocument();
+
+      if (expectedRevision !== null && expectedRevision !== undefined && Number(expectedRevision) !== Number(doc.revision)) {
+        return res.status(409).json({
+          message: 'Scheduler data changed while the generated schedule was being saved.',
+          data: normalizeData(doc.data),
+          revision: doc.revision,
+          updatedAt: doc.updatedAt
+        });
+      }
+
+      const nextData = normalizeData(doc.data);
+      nextData.schedules = schedules;
+      nextData.scheduleWaitlist = scheduleWaitlist;
+      nextData.generatorRun = generatorRun;
+      doc.data = nextData;
+      doc.revision = Number(doc.revision || 0) + 1;
+      await doc.save();
+
+      res.json({ data: normalizeData(doc.data), revision: doc.revision, updatedAt: doc.updatedAt });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.post('/api/scheduler/reset', async (_req, res, next) => {
     try {
       const doc = await getSchedulerDocument();

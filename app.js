@@ -2,11 +2,17 @@ const STORAGE_KEY = 'offlineClassScheduler.v1';
 const API_CONFIG_KEY = 'offlineClassScheduler.apiConfig.v1';
 const API_REVISION_KEY = 'offlineClassScheduler.apiRevision.v1';
 const SYNC_POLL_MS = 10000;
+const TRY_UNTIL_PERFECT_MAX_ATTEMPTS = 30;
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 const DEFAULT_ROOM_ID = '__default_classroom__';
 const DEFAULT_ROOM_NAME = 'Default Classroom';
 const NO_TEACHER_SELECT_VALUE = '__no_teacher__';
 const NO_TEACHER_LABEL = 'No Teacher (NT)';
+const MANUAL_SCHEDULE_CONFLICT_OPTIONS = Object.freeze({ ignoreStudentTransitionBuffer: true });
+const WAITLIST_SCHEDULE_CONFLICT_OPTIONS = Object.freeze({
+  ignoreStudentTransitionBuffer: true,
+  ignoreTeacherDailyClassLimit: true
+});
 
 const defaultData = {
   settings: { dayStart: '07:30', dayEnd: '16:30', slotDuration: 50, maxTeacherConsecutivePeriods: 3, teacherConsecutiveGapMinutes: 5, dayStarts: { Monday: '07:50', Tuesday: '07:30', Wednesday: '07:30', Thursday: '07:30', Friday: '07:30' } },
@@ -26,12 +32,15 @@ let data = loadData();
 let syncConfig = loadSyncConfig();
 let remoteRevision = Number(localStorage.getItem(API_REVISION_KEY) || 0);
 let pushTimer = null;
+let activePushPromise = null;
 let pollTimer = null;
 let pendingConfirmAction = null;
 const editState = { sections: null, subjects: null, teachers: null, rooms: null, teachingLoads: null, fixedActivities: null, schedules: null };
 let pendingWaitlistId = null;
 let pendingDeferredServerPull = false;
 let pendingDeferredExternalRefresh = false;
+let generationSyncLock = false;
+let generatedScheduleNeedsServerPush = false;
 
 const els = {
   alert: $('alert'),
@@ -40,7 +49,7 @@ const els = {
   sectionForm: $('sectionForm'), subjectForm: $('subjectForm'), teacherForm: $('teacherForm'), teacherStartTime: $('teacherStartTime'), roomForm: $('roomForm'), settingsForm: $('settingsForm'), scheduleForm: $('scheduleForm'), teachingLoadForm: $('teachingLoadForm'), syncForm: $('syncForm'),
   scheduleSection: $('scheduleSection'), scheduleSubject: $('scheduleSubject'), scheduleTeacher: $('scheduleTeacher'), scheduleDay: $('scheduleDay'), scheduleStart: $('scheduleStart'), scheduleDuration: $('scheduleDuration'), roomMode: $('roomMode'), manualRoomWrap: $('manualRoomWrap'), manualRoom: $('manualRoom'),
   loadSubject: $('loadSubject'), loadTeacher: $('loadTeacher'), loadMeetings: $('loadMeetings'), loadDuration: $('loadDuration'), loadRoomMode: $('loadRoomMode'), loadManualRoomWrap: $('loadManualRoomWrap'), loadManualRoom: $('loadManualRoom'), teachingLoadList: $('teachingLoadList'), replaceExistingSchedule: $('replaceExistingSchedule'), loadSectionChoices: $('loadSectionChoices'), loadSectionFilter: $('loadSectionFilter'), loadSelectAllSections: $('loadSelectAllSections'), loadClearSections: $('loadClearSections'), loadSelectMatchingSections: $('loadSelectMatchingSections'), loadCsvFile: $('loadCsvFile'), loadCsvImportBtn: $('loadCsvImportBtn'), loadCsvTemplateBtn: $('loadCsvTemplateBtn'), loadCsvCreateMissing: $('loadCsvCreateMissing'), resetTeachingLoadsBtn: $('resetTeachingLoadsBtn'),
-  fixedActivityForm: $('fixedActivityForm'), fixedType: $('fixedType'), fixedTitle: $('fixedTitle'), fixedSubjectFields: $('fixedSubjectFields'), fixedBatchFields: $('fixedBatchFields'), fixedSubject: $('fixedSubject'), fixedTeacher: $('fixedTeacher'), fixedTeacherFilter: $('fixedTeacherFilter'), fixedTeacherChoices: $('fixedTeacherChoices'), fixedTeacherSelectMatching: $('fixedTeacherSelectMatching'), fixedTeacherSelectAll: $('fixedTeacherSelectAll'), fixedTeacherClear: $('fixedTeacherClear'), fixedOfferingList: $('fixedOfferingList'), fixedAddOffering: $('fixedAddOffering'), fixedRoomMode: $('fixedRoomMode'), fixedManualRoomWrap: $('fixedManualRoomWrap'), fixedManualRoom: $('fixedManualRoom'), fixedStart: $('fixedStart'), fixedDuration: $('fixedDuration'), fixedSectionFilter: $('fixedSectionFilter'), fixedSectionChoices: $('fixedSectionChoices'), fixedActivityList: $('fixedActivityList'), fixedLunchPreset: $('fixedLunchPreset'), fixedSwpPreset: $('fixedSwpPreset'), fixedFlagCeremonyPreset: $('fixedFlagCeremonyPreset'), fixedFlagRetreatPreset: $('fixedFlagRetreatPreset'), fixedSelectAllSections: $('fixedSelectAllSections'), fixedClearSections: $('fixedClearSections'), fixedSelectMatchingSections: $('fixedSelectMatchingSections'),
+  fixedActivityForm: $('fixedActivityForm'), fixedType: $('fixedType'), fixedTitle: $('fixedTitle'), fixedSubjectFields: $('fixedSubjectFields'), fixedBatchFields: $('fixedBatchFields'), fixedSubject: $('fixedSubject'), fixedTeacher: $('fixedTeacher'), fixedTeacherFilter: $('fixedTeacherFilter'), fixedTeacherChoices: $('fixedTeacherChoices'), fixedTeacherSelectMatching: $('fixedTeacherSelectMatching'), fixedTeacherSelectAll: $('fixedTeacherSelectAll'), fixedTeacherClear: $('fixedTeacherClear'), fixedOfferingList: $('fixedOfferingList'), fixedAddOffering: $('fixedAddOffering'), fixedRoomMode: $('fixedRoomMode'), fixedManualRoomWrap: $('fixedManualRoomWrap'), fixedManualRoom: $('fixedManualRoom'), fixedStart: $('fixedStart'), fixedDuration: $('fixedDuration'), fixedSectionFilter: $('fixedSectionFilter'), fixedSectionChoices: $('fixedSectionChoices'), fixedActivityList: $('fixedActivityList'), fixedLunchPreset: $('fixedLunchPreset'), fixedSwpPreset: $('fixedSwpPreset'), fixedFlagCeremonyPreset: $('fixedFlagCeremonyPreset'), fixedFlagRetreatPreset: $('fixedFlagRetreatPreset'), fixedSelectAllSections: $('fixedSelectAllSections'), fixedClearSections: $('fixedClearSections'), fixedSelectMatchingSections: $('fixedSelectMatchingSections'), fixedCsvFile: $('fixedCsvFile'), fixedCsvImportBtn: $('fixedCsvImportBtn'), fixedCsvTemplateBtn: $('fixedCsvTemplateBtn'), fixedCsvCreateMissing: $('fixedCsvCreateMissing'), fixedClearAllBtn: $('fixedClearAllBtn'),
   sectionList: $('sectionList'), subjectList: $('subjectList'), teacherList: $('teacherList'), roomList: $('roomList'), scheduleTable: $('scheduleTable'), filterSection: $('filterSection'), filterDay: $('filterDay'), showFixedSchedules: $('showFixedSchedules'),
   dayStart: $('dayStart'), dayEnd: $('dayEnd'), slotDuration: $('slotDuration'), dayStartMonday: $('dayStartMonday'), dayStartTuesday: $('dayStartTuesday'), dayStartWednesday: $('dayStartWednesday'), dayStartThursday: $('dayStartThursday'), dayStartFriday: $('dayStartFriday'), mondayFlagPatternBtn: $('mondayFlagPatternBtn'), importFile: $('importFile'), exportBtn: $('exportBtn'), printBtn: $('printBtn'), exportSpreadsheetBtn: $('exportSpreadsheetBtn'), exportSpreadsheetSideBtn: $('exportSpreadsheetSideBtn'), exportTeacherSpreadsheetSideBtn: $('exportTeacherSpreadsheetSideBtn'), exportScheduleCsvSideBtn: $('exportScheduleCsvSideBtn'), exportScheduleJsonSideBtn: $('exportScheduleJsonSideBtn'), exportScheduleCsvTopBtn: $('exportScheduleCsvTopBtn'), exportScheduleJsonTopBtn: $('exportScheduleJsonTopBtn'), exportScheduleCsvHeaderBtn: $('exportScheduleCsvHeaderBtn'), exportScheduleJsonHeaderBtn: $('exportScheduleJsonHeaderBtn'), browseSectionsBtn: $('browseSectionsBtn'), browseTeachersBtn: $('browseTeachersBtn'), clearScheduleForm: $('clearScheduleForm'), autoGenerateBtn: $('autoGenerateBtn'), reshuffleScheduleBtn: $('reshuffleScheduleBtn'), perfectScheduleBtn: $('perfectScheduleBtn'), masterResetScheduleBtn: $('masterResetScheduleBtn'), generationProgress: $('generationProgress'), generationProgressTitle: $('generationProgressTitle'), generationProgressCount: $('generationProgressCount'), generationProgressBar: $('generationProgressBar'), generationProgressDetail: $('generationProgressDetail'),
   syncEnabled: $('syncEnabled'), apiBaseUrl: $('apiBaseUrl'), syncStatus: $('syncStatus'), syncPullBtn: $('syncPullBtn'), syncPushBtn: $('syncPushBtn'), serverRevision: $('serverRevision'),
@@ -125,7 +134,7 @@ function getOpenControlModal() {
 function isUserEditingSchedulerInput() {
   const active = document.activeElement;
   const activeForm = active?.closest?.('form');
-  return Boolean(getOpenControlModal() || (activeForm && activeForm !== els.syncForm));
+  return Boolean(generationSyncLock || getOpenControlModal() || (activeForm && activeForm !== els.syncForm));
 }
 function deferAutoRefreshWhileEditing(reason = 'editing') {
   if (!isUserEditingSchedulerInput()) return false;
@@ -163,10 +172,21 @@ async function apiRequest(path, options = {}) {
 function schedulePushToServer() {
   if (!syncConfig.enabled) return;
   clearTimeout(pushTimer);
-  pushTimer = setTimeout(() => pushToServer({ silent: true }), 650);
+  pushTimer = setTimeout(() => {
+    pushTimer = null;
+    if (generationSyncLock) return;
+    pushToServer({ silent: true });
+  }, 650);
 }
 async function pullFromServer({ silent = false } = {}) {
   if (!syncConfig.enabled) return false;
+  if (generationSyncLock) {
+    pendingDeferredServerPull = true;
+    const message = 'Server pull is paused until schedule generation and MongoDB persistence are complete.';
+    setSyncStatus(message, 'warn');
+    if (!silent) showAlert(message, 'warning');
+    return false;
+  }
   if (silent && deferAutoRefreshWhileEditing('you are entering data')) return false;
   try {
     setSyncStatus('Pulling latest schedule from server...', 'warn');
@@ -188,32 +208,153 @@ async function pullFromServer({ silent = false } = {}) {
 }
 async function pushToServer({ force = false, silent = false } = {}) {
   if (!syncConfig.enabled) return false;
-  try {
-    setSyncStatus('Saving schedule to server...', 'warn');
-    const payload = { data: normalizeData(data), expectedRevision: force ? null : remoteRevision };
-    const result = await apiRequest('/api/scheduler', { method: 'PUT', body: JSON.stringify(payload) });
-    remoteRevision = Number(result.revision || 0);
-    localStorage.setItem(API_REVISION_KEY, String(remoteRevision));
-    setSyncStatus(`Saved to server. Revision ${remoteRevision}.`, 'good');
-    if (!silent) showAlert('Schedule pushed to server.');
-    return true;
-  } catch (error) {
-    if (error.status === 409 && error.body?.data) {
-      remoteRevision = Number(error.body.revision || remoteRevision || 0);
+  if (activePushPromise) return activePushPromise;
+
+  const operation = (async () => {
+    try {
+      setSyncStatus('Saving schedule to server...', 'warn');
+      const payload = { data: normalizeData(data), expectedRevision: force ? null : remoteRevision };
+      const result = await apiRequest('/api/scheduler', { method: 'PUT', body: JSON.stringify(payload) });
+      remoteRevision = Number(result.revision || 0);
       localStorage.setItem(API_REVISION_KEY, String(remoteRevision));
-      data = normalizeData(error.body.data);
-      saveData({ localOnly: true });
-      renderAll();
-      renderSyncSettings();
-      const message = 'Another user updated the schedule before your save. The latest server copy was loaded. Please re-apply your change if needed.';
-      setSyncStatus(message, 'warn');
-      if (!silent) showAlert(message, 'warning');
+      generatedScheduleNeedsServerPush = false;
+      setSyncStatus(`Saved to server. Revision ${remoteRevision}.`, 'good');
+      if (!generationSyncLock && syncConfig.enabled && !pollTimer) startSyncPolling();
+      if (!silent) showAlert('Schedule pushed to server.');
+      return true;
+    } catch (error) {
+      if (error.status === 409 && error.body?.data) {
+        remoteRevision = Number(error.body.revision || remoteRevision || 0);
+        localStorage.setItem(API_REVISION_KEY, String(remoteRevision));
+        data = normalizeData(error.body.data);
+        saveData({ localOnly: true });
+        renderAll();
+        renderSyncSettings();
+        const message = 'Another user updated the schedule before your save. The latest server copy was loaded. Please re-apply your change if needed.';
+        setSyncStatus(message, 'warn');
+        if (!silent) showAlert(message, 'warning');
+        return false;
+      }
+      setSyncStatus(error.message || 'Could not save to server.', 'bad');
+      if (!silent) showAlert(error.message || 'Could not save to the MongoDB API server.', 'error');
       return false;
     }
-    setSyncStatus(error.message || 'Could not save to server.', 'bad');
-    if (!silent) showAlert(error.message || 'Could not save to the MongoDB API server.', 'error');
-    return false;
+  })();
+
+  activePushPromise = operation;
+  try {
+    return await operation;
+  } finally {
+    if (activePushPromise === operation) activePushPromise = null;
   }
+}
+function getGenerationBasisSignature(source = data) {
+  const safe = normalizeData(source);
+  return JSON.stringify({
+    settings: safe.settings,
+    sections: safe.sections,
+    subjects: safe.subjects,
+    teachers: safe.teachers,
+    rooms: safe.rooms,
+    teachingLoads: safe.teachingLoads,
+    fixedActivities: safe.fixedActivities
+  });
+}
+async function beginGenerationSyncLock() {
+  generationSyncLock = true;
+  generatedScheduleNeedsServerPush = false;
+  clearInterval(pollTimer);
+  pollTimer = null;
+  if (syncConfig.enabled) setSyncStatus('Server pull paused while the schedule is being generated.', 'warn');
+
+  if (activePushPromise) {
+    const saved = await activePushPromise;
+    if (!saved) {
+      generationSyncLock = false;
+      startSyncPolling();
+      showAlert('Schedule generation was not started because a pending MongoDB save conflicted with newer server data. Review the refreshed data, then generate again.', 'warning');
+      return false;
+    }
+  }
+  if (pushTimer) {
+    clearTimeout(pushTimer);
+    pushTimer = null;
+    const saved = await pushToServer({ silent: true });
+    if (!saved) {
+      generationSyncLock = false;
+      startSyncPolling();
+      showAlert('Schedule generation was not started because pending setup changes could not be saved to MongoDB. Resolve the sync warning, then generate again.', 'warning');
+      return false;
+    }
+  }
+  return true;
+}
+function endGenerationSyncLock() {
+  generationSyncLock = false;
+  pendingDeferredServerPull = false;
+  pendingDeferredExternalRefresh = false;
+  if (!syncConfig.enabled) return;
+  if (generatedScheduleNeedsServerPush) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+    setSyncStatus('Generated schedule is local only. Auto-pull is paused to prevent MongoDB from overwriting it. Use Push to Server after resolving the connection or revision issue.', 'bad');
+    return;
+  }
+  startSyncPolling();
+  setSyncStatus(`Generated schedule saved. Server sync active at revision ${remoteRevision || 0}.`, 'good');
+}
+async function persistGeneratedScheduleToServer({ basisSignature = getGenerationBasisSignature(data), silent = true, maxRetries = 3 } = {}) {
+  if (!syncConfig.enabled) return { saved: false, localOnly: true };
+  generatedScheduleNeedsServerPush = true;
+
+  const schedulePayload = {
+    schedules: Array.isArray(data.schedules) ? data.schedules.map(item => ({ ...item })) : [],
+    scheduleWaitlist: Array.isArray(data.scheduleWaitlist) ? data.scheduleWaitlist.map(item => ({ ...item })) : [],
+    generatorRun: Number(data.generatorRun || 0)
+  };
+  let expectedRevision = remoteRevision;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      setSyncStatus(`Saving generated schedule to MongoDB${attempt > 1 ? ` (retry ${attempt}/${maxRetries})` : ''}...`, 'warn');
+      const result = await apiRequest('/api/scheduler/generated-schedule', {
+        method: 'PATCH',
+        body: JSON.stringify({ ...schedulePayload, expectedRevision })
+      });
+      remoteRevision = Number(result.revision || 0);
+      localStorage.setItem(API_REVISION_KEY, String(remoteRevision));
+      generatedScheduleNeedsServerPush = false;
+      setSyncStatus(`Generated schedule saved to MongoDB. Revision ${remoteRevision}.`, 'good');
+      return { saved: true, revision: remoteRevision };
+    } catch (error) {
+      if ((error.status === 404 || error.status === 405) && attempt === 1) {
+        const saved = await pushToServer({ force: true, silent });
+        return { saved, revision: remoteRevision, legacyFallback: true };
+      }
+      if (error.status === 409 && error.body?.data) {
+        const latestServerData = normalizeData(error.body.data);
+        remoteRevision = Number(error.body.revision || remoteRevision || 0);
+        localStorage.setItem(API_REVISION_KEY, String(remoteRevision));
+        if (getGenerationBasisSignature(latestServerData) !== basisSignature) {
+          const message = 'The generated schedule is saved locally, but it was not written to MongoDB because sections, loads, teachers, rooms, settings, or fixed activities changed on the server during generation. Pull the latest server data and generate again.';
+          setSyncStatus(message, 'bad');
+          if (!silent) showAlert(message, 'error');
+          return { saved: false, conflict: true, setupChanged: true };
+        }
+        expectedRevision = remoteRevision;
+        continue;
+      }
+      const message = error.message || 'Could not save the generated schedule to MongoDB.';
+      setSyncStatus(message, 'bad');
+      if (!silent) showAlert(message, 'error');
+      return { saved: false, error };
+    }
+  }
+
+  const message = 'The schedule remains available locally, but MongoDB changed repeatedly while it was being saved. Use Push to Server or retry generation.';
+  setSyncStatus(message, 'bad');
+  if (!silent) showAlert(message, 'error');
+  return { saved: false, conflict: true };
 }
 function startSyncPolling() {
   clearInterval(pollTimer);
@@ -322,9 +463,9 @@ function getLunchBlocks(source = data) {
 }
 function getTeacherLunchWindow(source = data) {
   return {
-    start: source.settings?.teacherLunchStart || '10:30',
-    end: source.settings?.teacherLunchEnd || '13:00',
-    duration: Number(source.settings?.teacherLunchDuration || source.settings?.slotDuration || 50)
+    start: source.settings?.teacherLunchStart || '10:00',
+    end: source.settings?.teacherLunchEnd || '13:30',
+    duration: Number(source.settings?.teacherLunchDuration || 60)
   };
 }
 function teacherBusySlotsForDay(teacherId, day, schedules = getDisplayScheduleItems(), candidate = null, ignoreId = null, source = data) {
@@ -393,6 +534,305 @@ function getTeacherLunchConflict(schedule, schedules = getDisplayScheduleItems()
     return `${teacher.name} needs the same ${window.duration}-minute lunch window from Tuesday to Friday between ${formatTime(window.start)} and ${formatTime(window.end)}. This assignment would remove every common lunch window.`;
   }
   return `${teacher.name} needs at least ${window.duration} minutes for lunch between ${formatTime(window.start)} and ${formatTime(window.end)}. This assignment would remove all available lunch windows for the day.`;
+}
+
+function isOnceDailyShortOrSwp(item, source = data) {
+  if (!item || !item.sectionId || !item.day) return false;
+  const duration = Number(item.duration || 0);
+  const subjectLabel = item.subjectId ? byName(source.subjects || data.subjects, item.subjectId) : '';
+  const label = `${item.title || ''} ${item.category || ''} ${subjectLabel}`.toLowerCase();
+  return duration === 30 || label.includes('swp') || label.includes('student wellness');
+}
+function getOnceDailyShortOrSwpConflict(schedule, schedules = getDisplayScheduleItems(), ignoreId = null, source = data) {
+  if (!isOnceDailyShortOrSwp(schedule, source)) return '';
+  const existing = (schedules || []).find(item =>
+    item &&
+    item.id !== ignoreId &&
+    item.id !== schedule.id &&
+    item.day === schedule.day &&
+    item.sectionId === schedule.sectionId &&
+    isOnceDailyShortOrSwp(item, source)
+  );
+  if (!existing) return '';
+  const sectionName = byName(source.sections || data.sections, schedule.sectionId);
+  return `${sectionName} can only have one SWP / 30-minute class per day. Existing: ${conflictLabel(existing)} at ${timeRange(existing.start, existing.duration)}.`;
+}
+
+function getMaxTeacherClassesPerDay(source = data) {
+  return Math.max(1, Number(source.settings?.maxTeacherClassesPerDay || 4));
+}
+function getTeacherDailyClassCountConflict(schedule, schedules = getDisplayScheduleItems(), ignoreId = null, source = data) {
+  if (!schedule || isNonTeachingFixedSchedule(schedule) || !schedule.teacherId || !schedule.day) return '';
+  const teacher = (source.teachers || []).find(item => item.id === schedule.teacherId || item.name === schedule.teacherId);
+  if (!teacher) return '';
+  const maxDaily = getMaxTeacherClassesPerDay(source);
+  const currentCount = getClassItemsOnly(schedules)
+    .filter(item => item.id !== ignoreId && item.id !== schedule.id)
+    .filter(item => item.day === schedule.day && item.teacherId === schedule.teacherId)
+    .length;
+  const projected = currentCount + 1;
+  if (projected <= maxDaily) return '';
+  return `${teacher.name} can only have up to ${maxDaily} class assignment${maxDaily === 1 ? '' : 's'} per day. This would make ${projected} on ${schedule.day}.`;
+}
+function scheduleSubjectLabel(item, source = data) {
+  const subjectName = item?.subjectId ? byName(source.subjects || data.subjects, item.subjectId) : '';
+  return `${subjectName || ''} ${item?.title || ''} ${item?.category || ''}`;
+}
+function isSwpLabel(label) {
+  const normalized = String(label || '').toLowerCase();
+  return normalized.includes('swp') || normalized.includes('student wellness');
+}
+function isSwpLoad(load, source = data) {
+  const subject = (source.subjects || data.subjects || []).find(item => item.id === load?.subjectId);
+  return isSwpLabel(subject?.name || load?.title || '');
+}
+function getStudentTransitionSubjectKind(item, source = data) {
+  if (!item || !item.sectionId || isNonTeachingFixedSchedule(item) || isSwpLoad(item, source)) return '';
+  const label = scheduleSubjectLabel(item, source).toLowerCase();
+  if (label.includes('pehm')) return 'pehm';
+  if (label.includes('adtech')) return 'adtech';
+  if (label.includes('computer science') || /\bcs\b/i.test(label)) return 'cs';
+  return '';
+}
+function isStudentTransitionSubject(item, source = data) {
+  return Boolean(getStudentTransitionSubjectKind(item, source));
+}
+function isStudentTransitionBuffer(item, source = data) {
+  if (!item || !item.sectionId) return false;
+  const label = scheduleSubjectLabel(item, source).toLowerCase();
+  return label.includes('lunch') || isSwpLabel(label);
+}
+function hasAdjacentStudentTransitionBuffer(schedule, schedules = getDisplayScheduleItems(), ignoreId = null, source = data) {
+  if (!schedule?.sectionId || !schedule?.day || !schedule?.start) return true;
+  const start = toMinutes(schedule.start);
+  const end = start + Number(schedule.duration || source.settings?.slotDuration || 50);
+  return (schedules || []).some(item => {
+    if (!item || item.id === ignoreId || item.id === schedule.id) return false;
+    if (item.day !== schedule.day || item.sectionId !== schedule.sectionId) return false;
+    if (!isStudentTransitionBuffer(item, source)) return false;
+    const itemStart = toMinutes(item.start);
+    const itemEnd = itemStart + Number(item.duration || source.settings?.slotDuration || 50);
+    return itemEnd === start || itemStart === end;
+  });
+}
+
+function getSectionBusyBlocks(sectionId, day, schedules = getDisplayScheduleItems(), ignoreId = null, source = data) {
+  if (!sectionId || !day) return [];
+  return (schedules || [])
+    .filter(item => item && item.id !== ignoreId && item.day === day && item.sectionId === sectionId)
+    .map(item => {
+      const start = toMinutes(item.start);
+      const duration = Number(item.duration || source.settings?.slotDuration || 50);
+      return { id: item.id, start, end: start + duration, item };
+    })
+    .filter(block => Number.isFinite(block.start) && Number.isFinite(block.end) && block.end > block.start)
+    .sort((a, b) => a.start - b.start || a.end - b.end);
+}
+function isSectionWindowFree(sectionId, day, startMinute, duration, schedules = getDisplayScheduleItems(), ignoreId = null, source = data) {
+  const endMinute = startMinute + Number(duration || 0);
+  if (startMinute < toMinutes(getDayTeachingStart(day, source)) || endMinute > toMinutes(getDayEnd(day, source))) return false;
+  return !getSectionBusyBlocks(sectionId, day, schedules, ignoreId, source)
+    .some(block => startMinute < block.end && block.start < endMinute);
+}
+function hasAdjacentVacantTransitionBuffer(schedule, schedules = getDisplayScheduleItems(), ignoreId = null, source = data) {
+  if (!schedule?.sectionId || !schedule?.day || !schedule?.start) return true;
+  const required = Number(source.settings?.studentTransitionBufferMinutes || 30);
+  const start = toMinutes(schedule.start);
+  const end = start + Number(schedule.duration || source.settings?.slotDuration || 50);
+  const beforeStart = start - required;
+  const afterStart = end;
+  return isSectionWindowFree(schedule.sectionId, schedule.day, beforeStart, required, schedules, ignoreId || schedule.id, source)
+    || isSectionWindowFree(schedule.sectionId, schedule.day, afterStart, required, schedules, ignoreId || schedule.id, source);
+}
+function isStudentTransitionEdgeSlot(schedule, source = data) {
+  if (!schedule?.sectionId || !schedule?.day || !schedule?.start) return false;
+  const start = toMinutes(schedule.start);
+  const duration = Number(schedule.duration || source.settings?.slotDuration || 50);
+  const teachingStart = toMinutes(getDayTeachingStart(schedule.day, source));
+  if (start === teachingStart) return true;
+
+  const dayEnd = toMinutes(getDayEnd(schedule.day, source));
+  const validStarts = generateSlots(schedule.day, { sectionId: schedule.sectionId, source })
+    .map(toMinutes)
+    .filter(slotStart => slotStart + duration <= dayEnd);
+  const lastStart = validStarts.length ? Math.max(...validStarts) : NaN;
+  return Number.isFinite(lastStart) && start === lastStart;
+}
+function hasStudentTransitionBuffer(schedule, schedules = getDisplayScheduleItems(), ignoreId = null, source = data) {
+  const kind = getStudentTransitionSubjectKind(schedule, source);
+  const hasEdgeAnchor = isStudentTransitionEdgeSlot(schedule, source);
+  const hasNamedAnchor = hasAdjacentStudentTransitionBuffer(schedule, schedules, ignoreId, source);
+
+  // A PEHM block needs only one operational anchor: start/end of the school day,
+  // or direct adjacency to Lunch or SWP. A generic vacant gap is not treated as
+  // the PEHM changing/transit period because it may not be a protected activity.
+  if (kind === 'pehm') return hasEdgeAnchor || hasNamedAnchor;
+
+  return hasEdgeAnchor
+    || hasNamedAnchor
+    || hasAdjacentVacantTransitionBuffer(schedule, schedules, ignoreId, source);
+}
+function getStudentTransitionBufferConflict(schedule, schedules = getDisplayScheduleItems(), ignoreId = null, source = data) {
+  const kind = getStudentTransitionSubjectKind(schedule, source);
+  if (!kind) return '';
+  if (hasStudentTransitionBuffer(schedule, schedules, ignoreId, source)) return '';
+  const sectionName = byName(source.sections || data.sections, schedule.sectionId);
+  const subjectName = byName(source.subjects || data.subjects, schedule.subjectId);
+  if (kind === 'pehm') {
+    return `${sectionName} needs ${subjectName} as the first or last class of the day, or directly before/after Lunch or SWP.`;
+  }
+  return `${sectionName} needs ${subjectName} beside SWP/Lunch, a true 30-minute vacant transition buffer, or the first/last teaching slot of the day.`;
+}
+
+function isMovableSwpSchedule(item, source = data) {
+  if (!item || !item.sectionId || !item.day || isFixedSchedule(item)) return false;
+  const label = scheduleSubjectLabel(item, source).toLowerCase();
+  return isSwpLabel(label) && Number(item.duration || 30) <= 30;
+}
+function replaceScheduleInList(schedules, replacement) {
+  return (schedules || []).map(item => item.id === replacement.id ? replacement : item);
+}
+function tryBuildTransitionBufferAdjustment(candidate, schedules, source = data, conflictOptions = {}) {
+  if (!isStudentTransitionSubject(candidate, source)) return null;
+  if (hasStudentTransitionBuffer(candidate, schedules, candidate.id, source)) return null;
+
+  const candidateStart = toMinutes(candidate.start);
+  const candidateEnd = candidateStart + Number(candidate.duration || source.settings?.slotDuration || 50);
+  const dayStart = toMinutes(getDayTeachingStart(candidate.day, source));
+  const dayEnd = toMinutes(getDayEnd(candidate.day, source));
+
+  const swpBlocks = (schedules || [])
+    .filter(item => isMovableSwpSchedule(item, source))
+    .filter(item => item.sectionId === candidate.sectionId && item.day === candidate.day)
+    .sort((a, b) => Math.abs(toMinutes(a.start) - candidateStart) - Math.abs(toMinutes(b.start) - candidateStart));
+
+  for (const swp of swpBlocks) {
+    const swpDuration = Number(swp.duration || 30);
+    const targetStarts = [candidateStart - swpDuration, candidateEnd]
+      .filter(start => start >= dayStart && start + swpDuration <= dayEnd);
+
+    for (const targetStart of targetStarts) {
+      const movedSwp = { ...swp, start: fromMinutes(targetStart) };
+      const swpConflicts = getConflictsInList(movedSwp, schedules, swp.id);
+      if (swpConflicts.length) continue;
+
+      const simulated = replaceScheduleInList(schedules, movedSwp);
+      if (!hasStudentTransitionBuffer(candidate, simulated, candidate.id, source)) continue;
+      const candidateConflicts = getConflictsInList(candidate, simulated, candidate.id, conflictOptions);
+      if (candidateConflicts.length) continue;
+
+      return {
+        ...candidate,
+        __adjustments: [{ id: swp.id, patch: { start: movedSwp.start } }]
+      };
+    }
+  }
+
+  return null;
+}
+function getSwpPreferredSlotPenalty(start) {
+  const minute = toMinutes(start);
+  const preferredStarts = [600, 620, 630, 650, 670, 700]; // 10:00, 10:20, 10:30, 10:50, 11:10, 11:40
+  return Math.min(...preferredStarts.map(target => Math.abs(minute - target)));
+}
+
+
+function getSectionFreeWindows(sectionId, day, schedules = [], candidate = null, ignoreId = null, source = data) {
+  if (!sectionId || !day) return [];
+  const dayStart = toMinutes(getDayTeachingStart(day, source));
+  const dayEnd = toMinutes(getDayEnd(day, source));
+  const blocks = mergeTimeBlocks([
+    ...getSectionBusyBlocks(sectionId, day, schedules, ignoreId, source)
+      .map(block => ({ start: fromMinutes(block.start), duration: block.end - block.start })),
+    candidate && candidate.sectionId === sectionId && candidate.day === day
+      ? { start: candidate.start, duration: candidate.duration }
+      : null
+  ].filter(Boolean))
+    .map(block => ({ start: Math.max(dayStart, block.start), end: Math.min(dayEnd, block.end) }))
+    .filter(block => block.end > block.start)
+    .sort((a, b) => a.start - b.start || a.end - b.end);
+
+  const windows = [];
+  let cursor = dayStart;
+  blocks.forEach(block => {
+    if (block.start > cursor) windows.push({ start: cursor, end: block.start, duration: block.start - cursor });
+    cursor = Math.max(cursor, block.end);
+  });
+  if (cursor < dayEnd) windows.push({ start: cursor, end: dayEnd, duration: dayEnd - cursor });
+  return windows;
+}
+function getVacancyRunPenalty(window, slotMinutes) {
+  const duration = Math.max(0, Number(window?.duration || 0));
+  if (!duration) return 0;
+  const slot = Math.max(1, Number(slotMinutes || 50));
+  const units = duration / slot;
+  const adjacentUnits = Math.max(0, units - 1);
+  // Squaring the run length makes two or three adjacent vacant periods much
+  // more expensive than the same free time divided across the week.
+  let penalty = units * units * 180;
+  penalty += adjacentUnits * adjacentUnits * 420;
+  if (duration >= slot * 2 - 5) penalty += Math.max(0, duration - slot) * 14;
+  return penalty;
+}
+function getSectionDayFragmentationPenalty(sectionId, day, schedules = [], candidate = null, ignoreId = null, source = data) {
+  if (!sectionId || !day) return 0;
+  const slot = Math.max(1, Number(source.settings?.slotDuration || 50));
+  const dayStart = toMinutes(getDayTeachingStart(day, source));
+  const dayEnd = toMinutes(getDayEnd(day, source));
+  const windows = getSectionFreeWindows(sectionId, day, schedules, candidate, ignoreId, source);
+  return windows.reduce((penalty, window) => {
+    let value = getVacancyRunPenalty(window, slot);
+    const isInternal = window.start > dayStart && window.end < dayEnd;
+    // Internal holes remain undesirable, but the primary objective is to
+    // break up long contiguous vacant runs rather than fill top-to-bottom.
+    if (isInternal) value += window.duration * 3.5;
+    return penalty + value;
+  }, 0);
+}
+function getCandidateFragmentationDelta(candidate, schedules = [], source = data) {
+  if (!candidate?.sectionId || !candidate?.day) return 0;
+  const before = getSectionDayFragmentationPenalty(candidate.sectionId, candidate.day, schedules, null, candidate.id, source);
+  const after = getSectionDayFragmentationPenalty(candidate.sectionId, candidate.day, schedules, candidate, candidate.id, source);
+  return after - before;
+}
+function getCandidateSoftScore(candidate, schedules = [], source = data) {
+  let score = 0;
+  // Keep the signed delta. A negative value means the candidate splits a long
+  // vacancy run and must be actively rewarded, not merely left unpenalized.
+  score += getCandidateFragmentationDelta(candidate, schedules, source);
+  score += getTeacherConsecutivePenaltyForCandidate(candidate, schedules, source) * 0.8;
+  if (isStudentTransitionSubject(candidate, source) && !hasStudentTransitionBuffer(candidate, schedules, candidate.id, source)) score += 9000;
+  if (isSwpLoad(candidate, source)) score += getSwpPreferredSlotPenalty(candidate.start) * 6;
+  return score;
+}
+function getSectionRequiredMinutes(sectionId, source = data) {
+  const loadMinutes = (source.teachingLoads || [])
+    .filter(load => load.sectionId === sectionId)
+    .reduce((sum, load) => sum + Number(load.meetings || 1) * Number(load.duration || source.settings?.slotDuration || 50), 0);
+  const fixedMinutes = expandFixedActivities(source)
+    .filter(item => item.sectionId === sectionId)
+    .reduce((sum, item) => sum + Number(item.duration || source.settings?.slotDuration || 50), 0);
+  return loadMinutes + fixedMinutes;
+}
+function getSectionAvailableMinutes(sectionId, source = data) {
+  return DAYS.reduce((sum, day) => {
+    const total = Math.max(0, toMinutes(getDayEnd(day, source)) - toMinutes(getDayTeachingStart(day, source)));
+    const protectedMinutes = getSectionProtectedBlocks(day, sectionId, source).reduce((acc, block) => acc + Math.max(0, block.end - block.start), 0);
+    return sum + Math.max(0, total - protectedMinutes);
+  }, 0);
+}
+function getSectionTightnessScore(sectionId, source = data) {
+  const available = Math.max(1, getSectionAvailableMinutes(sectionId, source));
+  return getSectionRequiredMinutes(sectionId, source) / available;
+}
+function getSectionRemainingLoadMinutes(sectionId, scheduledItems = [], source = data) {
+  const required = (source.teachingLoads || [])
+    .filter(load => load.sectionId === sectionId)
+    .reduce((sum, load) => sum + Number(load.meetings || 1) * Number(load.duration || source.settings?.slotDuration || 50), 0);
+  const placed = getClassItemsOnly(scheduledItems)
+    .filter(item => item.sectionId === sectionId && !isFixedSchedule(item))
+    .reduce((sum, item) => sum + Number(item.duration || source.settings?.slotDuration || 50), 0);
+  return Math.max(0, required - placed);
 }
 function getClassItemsOnly(schedules = []) { return getUniqueClassItems(schedules); }
 function getTeacherTotalLoadMinutes(teacherId, source = data) {
@@ -565,7 +1005,7 @@ function showAlert(message, type = 'success') {
 function sleep(ms = 0) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
-function setGenerationProgress({ attempt = 0, max = 50, currentFailures = null, bestFailures = null, bestPlaced = 0, status = 'running', seed = null } = {}) {
+function setGenerationProgress({ attempt = 0, max = TRY_UNTIL_PERFECT_MAX_ATTEMPTS, currentFailures = null, bestFailures = null, bestPlaced = 0, status = 'running', seed = null } = {}) {
   if (!els.generationProgress) return;
   const percentage = max ? Math.min(100, Math.round((attempt / max) * 100)) : 0;
   els.generationProgress.classList.remove('hidden', 'done', 'warning');
@@ -1512,7 +1952,7 @@ function renderScheduleTable() {
 }
 function renderAll() { renderSettings(); renderSelects(); renderTimeOptions(); renderLists(); renderScheduleFilters(); renderScheduleTable(); renderDashboardStats(); renderControlCounts(); }
 
-function getConflictsInList(newSchedule, schedules, ignoreId = null) {
+function getConflictsInList(newSchedule, schedules, ignoreId = null, options = {}) {
   const conflicts = [];
   const dayWindowConflict = getDayWindowConflict(newSchedule);
   if (dayWindowConflict) conflicts.push(dayWindowConflict);
@@ -1520,6 +1960,16 @@ function getConflictsInList(newSchedule, schedules, ignoreId = null) {
   if (teacherStartConflict) conflicts.push(teacherStartConflict);
   const teacherLunchConflict = getTeacherLunchConflict(newSchedule, schedules, ignoreId);
   if (teacherLunchConflict) conflicts.push(teacherLunchConflict);
+  const onceDailyShortConflict = getOnceDailyShortOrSwpConflict(newSchedule, schedules, ignoreId);
+  if (onceDailyShortConflict) conflicts.push(onceDailyShortConflict);
+  if (!options.ignoreTeacherDailyClassLimit) {
+    const teacherDailyCountConflict = getTeacherDailyClassCountConflict(newSchedule, schedules, ignoreId);
+    if (teacherDailyCountConflict) conflicts.push(teacherDailyCountConflict);
+  }
+  if (!options.ignoreStudentTransitionBuffer) {
+    const studentTransitionBufferConflict = getStudentTransitionBufferConflict(newSchedule, schedules, ignoreId);
+    if (studentTransitionBufferConflict) conflicts.push(studentTransitionBufferConflict);
+  }
   const newIsClassLike = isClassLikeSchedule(newSchedule);
   schedules.forEach(existing => {
     if (existing.id === ignoreId || existing.day !== newSchedule.day) return;
@@ -1541,7 +1991,7 @@ function getConflictsInList(newSchedule, schedules, ignoreId = null) {
   });
   return conflicts;
 }
-function getConflicts(newSchedule, ignoreId = null) { return getConflictsInList(newSchedule, getDisplayScheduleItems(), ignoreId); }
+function getConflicts(newSchedule, ignoreId = null, options = {}) { return getConflictsInList(newSchedule, getDisplayScheduleItems(), ignoreId, options); }
 function roomHasConflictInList(roomId, day, start, duration, schedules, ignoreId = null) {
   if (isDefaultRoom(roomId)) return false;
   return schedules.some(existing => existing.id !== ignoreId && isClassLikeSchedule(existing) && !isDefaultRoom(existing.roomId) && existing.roomId === roomId && existing.day === day && overlaps(start, duration, existing.start, existing.duration));
@@ -2287,6 +2737,361 @@ async function importTeachingLoadsFromCsv() {
   showAlert(`CSV import finished: ${added} added, ${updated} updated, ${skipped} skipped.${creationSummary.length ? ` Created: ${creationSummary.join(', ')}.` : ''}${issueSummary}`, errors.length ? 'warning' : 'success');
 }
 
+function normalizeFixedCsvType(value) {
+  const key = normalizeCsvLookup(value || 'activity').replace(/[^a-z0-9]+/g, '');
+  if (['activity', 'fixed', 'fixedactivity', 'lunch', 'flag', 'protected'].includes(key)) return 'activity';
+  if (['subject', 'fixedsubject', 'sharedclass', 'class'].includes(key)) return 'subject';
+  if (['batch', 'batchsubject', 'batchfixedsubject', 'elective', 'research', 'batchwide'].includes(key)) return 'batch';
+  return '';
+}
+function parseFixedCsvDays(value) {
+  const raw = String(value || '').trim();
+  const compact = normalizeCsvLookup(raw).replace(/[^a-z0-9*]+/g, '');
+  if (['all', 'alldays', 'weekdays', 'mf', 'mondayfriday', '*'].includes(compact)) return { days: [...DAYS], invalid: [] };
+  const aliases = {
+    mon: 'Monday', monday: 'Monday',
+    tue: 'Tuesday', tues: 'Tuesday', tuesday: 'Tuesday',
+    wed: 'Wednesday', weds: 'Wednesday', wednesday: 'Wednesday',
+    thu: 'Thursday', thur: 'Thursday', thurs: 'Thursday', thursday: 'Thursday',
+    fri: 'Friday', friday: 'Friday'
+  };
+  const parts = splitCsvSections(raw);
+  const days = [];
+  const invalid = [];
+  parts.forEach(part => {
+    const key = normalizeCsvLookup(part).replace(/[^a-z]/g, '');
+    const day = aliases[key];
+    if (!day) invalid.push(part);
+    else if (!days.includes(day)) days.push(day);
+  });
+  return { days: DAYS.filter(day => days.includes(day)), invalid };
+}
+function isValidCsvTime(value) {
+  const text = String(value || '').trim();
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(text)) return false;
+  return Number.isFinite(toMinutes(text));
+}
+function fixedCsvGroupKey(record, type, title, days, start, duration) {
+  const explicit = getCsvValue(record, ['key', 'activityKey', 'fixedKey', 'group', 'groupKey']);
+  const raw = explicit || `${type}|${title}|${days.join(';')}|${start}|${duration}`;
+  return normalizeCsvLookup(raw);
+}
+function downloadFixedActivityTemplate() {
+  const rows = [
+    ['key', 'type', 'title', 'days', 'start', 'duration', 'sections', 'subject', 'teacher', 'roomMode', 'room', 'offeringTitle', 'teacherStart'],
+    ['lunch-all', 'activity', 'Lunch Break', 'Monday;Tuesday;Wednesday;Thursday;Friday', '12:00', '60', 'ALL', '', '', '', '', '', ''],
+    ['flag-ceremony', 'activity', 'Flag Ceremony', 'Monday', '07:30', '20', 'ALL', '', '', '', '', '', ''],
+    ['homeroom-g7', 'subject', 'Homeroom Guidance', 'Monday', '07:50', '50', 'Grade 7 - Diamond; Grade 7 - Jade', 'Homeroom Guidance', 'Santos', 'default', '', '', '07:30'],
+    ['elective-g10', 'batch', 'Elective', 'Wednesday', '13:40', '100', 'Grade 10 - Diamond; Grade 10 - Jade', '', 'Reyes', 'manual', 'ICT Laboratory', 'Drone Technology', '07:30'],
+    ['elective-g10', 'batch', 'Elective', 'Wednesday', '13:40', '100', 'Grade 10 - Diamond; Grade 10 - Jade', '', 'Cruz', 'manual', 'Electronics Laboratory', 'Advanced Technology', '07:30']
+  ];
+  downloadBlob(new Blob(['\uFEFF' + buildCsv(rows)], { type: 'text/csv;charset=utf-8' }), 'fixed-activities-template.csv');
+}
+function fixedCsvIsAllSectionsToken(value) {
+  const key = normalizeCsvLookup(value).replace(/[^a-z0-9*]+/g, '');
+  return ['all', 'allsections', '*'].includes(key);
+}
+function resolveFixedCsvSections(sectionTokens, options = {}) {
+  options.created = options.created || { teachers: 0, subjects: 0, sections: 0, rooms: 0 };
+  const tokens = [...new Set((sectionTokens || []).map(value => String(value || '').trim()).filter(Boolean))];
+  if (!tokens.length) return { error: 'Add at least one section or use ALL.' };
+  const selected = [];
+  const addSection = section => {
+    if (section && !selected.some(item => item.id === section.id)) selected.push(section);
+  };
+  for (const token of tokens) {
+    if (fixedCsvIsAllSectionsToken(token)) {
+      data.sections.forEach(addSection);
+      continue;
+    }
+    if (token.endsWith('*')) {
+      const prefix = normalizeCsvLookup(token.slice(0, -1));
+      const matches = data.sections.filter(section => normalizeCsvLookup(section.name).startsWith(prefix));
+      if (!matches.length) return { error: `No sections match wildcard: ${token}` };
+      matches.forEach(addSection);
+      continue;
+    }
+    const result = resolveCsvNamedItem('sections', token, { label: 'section', prefix: 'section', createMissing: options.createMissing });
+    if (result.error) return result;
+    if (result.created) options.created.sections++;
+    addSection(result.item);
+  }
+  if (!selected.length) return { error: 'No sections are available for this fixed activity.' };
+  return { items: selected };
+}
+function fixedCsvCategoryForType(type) {
+  return type === 'subject' ? 'fixedSubject' : type === 'batch' ? 'batchSubject' : 'fixed';
+}
+function fixedCsvComparable(activity) {
+  const offerings = getBatchOfferings(activity).map(offering => ({
+    title: String(offering.title || '').trim(),
+    teacherId: offering.teacherId || '',
+    roomMode: offering.roomMode || 'default',
+    roomId: offering.roomMode === 'manual' ? offering.roomId || '' : DEFAULT_ROOM_ID
+  })).sort((a, b) => `${a.teacherId}|${a.title}|${a.roomId}`.localeCompare(`${b.teacherId}|${b.title}|${b.roomId}`));
+  return JSON.stringify({
+    title: String(activity.title || '').trim(),
+    start: activity.start || '',
+    duration: Number(activity.duration || 0),
+    days: [...(activity.days || [])].sort(),
+    sectionIds: [...(activity.sectionIds || [])].sort(),
+    category: fixedCsvCategoryForType(isBatchSubjectActivity(activity) ? 'batch' : isFixedSubjectActivity(activity) ? 'subject' : 'activity'),
+    subjectId: activity.subjectId || null,
+    teacherId: activity.teacherId || null,
+    roomMode: activity.roomMode || 'default',
+    roomId: activity.roomMode === 'manual' ? activity.roomId || '' : DEFAULT_ROOM_ID,
+    offerings
+  });
+}
+function buildFixedActivityFromCsvGroup(groupKey, rows, options = {}) {
+  options.created = options.created || { teachers: 0, subjects: 0, sections: 0, rooms: 0 };
+  const first = rows[0];
+  const mismatch = rows.find(row => row.type !== first.type || normalizeCsvLookup(row.title) !== normalizeCsvLookup(first.title) || row.start !== first.start || row.duration !== first.duration || row.days.join('|') !== first.days.join('|'));
+  if (mismatch) throw new Error(`Rows sharing key "${first.displayKey}" must use the same type, title, days, start, and duration.`);
+
+  const sectionTokens = [...new Set(rows.flatMap(row => row.sectionTokens))];
+  const sectionResult = resolveFixedCsvSections(sectionTokens, options);
+  if (sectionResult.error) throw new Error(sectionResult.error);
+  const sectionIds = sectionResult.items.map(item => item.id);
+  const category = fixedCsvCategoryForType(first.type);
+  const base = {
+    id: createId('fixed'),
+    csvKey: groupKey,
+    title: first.title,
+    start: first.start,
+    duration: first.duration,
+    days: first.days,
+    sectionIds,
+    protected: true,
+    category,
+    subjectId: null,
+    teacherId: null,
+    teacherIds: [],
+    offerings: [],
+    roomMode: 'default',
+    roomId: DEFAULT_ROOM_ID
+  };
+
+  if (first.type === 'activity') return base;
+
+  if (first.type === 'subject') {
+    const subjectNames = [...new Set(rows.map(row => normalizeCsvLookup(row.subjectName)).filter(Boolean))];
+    const teacherNames = [...new Set(rows.map(row => normalizeCsvLookup(row.teacherName)).filter(Boolean))];
+    const roomSpecs = [...new Set(rows.map(row => `${row.roomMode}|${normalizeCsvLookup(row.roomName)}`))];
+    if (subjectNames.length !== 1) throw new Error('A fixed subject group must identify exactly one subject.');
+    if (teacherNames.length !== 1) throw new Error('A fixed subject group must identify exactly one teacher.');
+    if (roomSpecs.length !== 1) throw new Error('A fixed subject group must use one consistent room assignment.');
+    if (isNoTeacherCsvValue(first.teacherName)) throw new Error('Fixed subjects require an assigned teacher; NT is not supported here.');
+    if (first.roomMode === 'auto') throw new Error('Fixed subjects support only default or manual room assignment.');
+
+    const subjectRow = rows.find(row => row.subjectName) || first;
+    const teacherRow = rows.find(row => row.teacherName) || first;
+    const roomRow = rows.find(row => row.roomName || row.roomMode !== 'default') || first;
+    const subjectResult = resolveCsvNamedItem('subjects', subjectRow.subjectName, { label: 'subject', prefix: 'subject', createMissing: options.createMissing, duration: first.duration });
+    if (subjectResult.error) throw new Error(subjectResult.error);
+    if (subjectResult.created) options.created.subjects++;
+    const teacherResult = resolveCsvNamedItem('teachers', teacherRow.teacherName, { label: 'teacher', prefix: 'teacher', createMissing: options.createMissing, startTime: teacherRow.teacherStart });
+    if (teacherResult.error) throw new Error(teacherResult.error);
+    if (teacherResult.created) options.created.teachers++;
+
+    let roomId = DEFAULT_ROOM_ID;
+    if (roomRow.roomMode === 'manual') {
+      const roomResult = resolveCsvNamedItem('rooms', roomRow.roomName, { label: 'room', prefix: 'room', createMissing: options.createMissing });
+      if (roomResult.error) throw new Error(roomResult.error);
+      if (roomResult.created) options.created.rooms++;
+      roomId = roomResult.item.id;
+    }
+    return { ...base, subjectId: subjectResult.item.id, teacherId: teacherResult.item.id, roomMode: roomRow.roomMode, roomId };
+  }
+
+  const offerings = [];
+  const usedTeachers = new Set();
+  rows.forEach(row => {
+    if (!row.teacherName || isNoTeacherCsvValue(row.teacherName)) throw new Error(`Row ${row.rowNo}: every batch offering requires an assigned teacher.`);
+    if (row.roomMode === 'auto') throw new Error(`Row ${row.rowNo}: batch offerings support only default or manual room assignment.`);
+    const teacherResult = resolveCsvNamedItem('teachers', row.teacherName, { label: 'teacher', prefix: 'teacher', createMissing: options.createMissing, startTime: row.teacherStart });
+    if (teacherResult.error) throw new Error(`Row ${row.rowNo}: ${teacherResult.error}`);
+    if (teacherResult.created) options.created.teachers++;
+    if (usedTeachers.has(teacherResult.item.id)) throw new Error(`Row ${row.rowNo}: duplicate teacher ${teacherResult.item.name} in the same batch-wide block.`);
+    usedTeachers.add(teacherResult.item.id);
+
+    let roomId = DEFAULT_ROOM_ID;
+    if (row.roomMode === 'manual') {
+      const roomResult = resolveCsvNamedItem('rooms', row.roomName, { label: 'room', prefix: 'room', createMissing: options.createMissing });
+      if (roomResult.error) throw new Error(`Row ${row.rowNo}: ${roomResult.error}`);
+      if (roomResult.created) options.created.rooms++;
+      roomId = roomResult.item.id;
+    }
+    offerings.push({
+      id: createId('offering'),
+      title: row.offeringTitle || first.title,
+      teacherId: teacherResult.item.id,
+      roomMode: row.roomMode,
+      roomId
+    });
+  });
+  if (!offerings.length) throw new Error('Add at least one teacher offering for a batch-wide block.');
+  return { ...base, teacherIds: offerings.map(offering => offering.teacherId), offerings };
+}
+async function importFixedActivitiesFromCsv() {
+  const file = els.fixedCsvFile?.files?.[0];
+  if (!file) return showAlert('Choose a fixed activities CSV file to import.', 'warning');
+  let rows;
+  try {
+    rows = parseCsvText(await readFileAsText(file));
+  } catch (error) {
+    return showAlert(`Could not read the fixed activities CSV file. ${error.message || ''}`, 'error');
+  }
+  if (!rows.length || rows.length < 2) return showAlert('Fixed activities CSV is empty. Download the template and try again.', 'warning');
+
+  const headers = rows[0].map(normalizeCsvHeader);
+  const rawRecords = rows.slice(1).map((row, index) => ({
+    rowNo: index + 2,
+    record: headers.reduce((object, key, columnIndex) => ({ ...object, [key]: row[columnIndex] || '' }), {})
+  }));
+  const errors = [];
+  const groups = new Map();
+  let blankRows = 0;
+
+  rawRecords.forEach(({ rowNo, record }) => {
+    const meaningful = Object.values(record).some(value => String(value || '').trim());
+    if (!meaningful) { blankRows++; return; }
+    const typeRaw = getCsvValue(record, ['type', 'activityType', 'fixedType', 'category']) || 'activity';
+    const type = normalizeFixedCsvType(typeRaw);
+    const title = String(getCsvValue(record, ['title', 'activity', 'activityName', 'displayName', 'name']) || '').trim();
+    const dayResult = parseFixedCsvDays(getCsvValue(record, ['days', 'day', 'weekdays']));
+    const start = String(getCsvValue(record, ['start', 'startTime', 'time']) || '').trim();
+    const duration = Number(getCsvValue(record, ['duration', 'durationMinutes', 'minutes']) || data.settings.slotDuration || 50);
+    const sectionTokens = splitCsvSections(getCsvValue(record, ['sections', 'section', 'sectionNames', 'sectionName']));
+    const subjectName = String(getCsvValue(record, ['subject', 'subjectName']) || '').trim();
+    const teacherName = String(getCsvValue(record, ['teacher', 'teacherName']) || '').trim();
+    const roomName = String(getCsvValue(record, ['room', 'roomName', 'manualRoom', 'lab', 'laboratory']) || '').trim();
+    const roomMode = parseRoomModeValue(getCsvValue(record, ['roomMode', 'roomAssignment', 'roomType']), roomName);
+    const offeringTitle = String(getCsvValue(record, ['offeringTitle', 'specificTitle', 'teacherTitle', 'offering']) || '').trim();
+    const teacherStart = String(getCsvValue(record, ['teacherStart', 'teacherStartTime', 'officialStart', 'officialStartTime']) || data.settings.dayStart || defaultData.settings.dayStart).trim();
+
+    if (!type) { errors.push(`Row ${rowNo}: unsupported type "${typeRaw}". Use activity, subject, or batch.`); return; }
+    if (!title) { errors.push(`Row ${rowNo}: title is required.`); return; }
+    if (!dayResult.days.length || dayResult.invalid.length) { errors.push(`Row ${rowNo}: invalid day value${dayResult.invalid.length ? ` (${dayResult.invalid.join(', ')})` : ''}.`); return; }
+    if (!isValidCsvTime(start)) { errors.push(`Row ${rowNo}: start time must use 24-hour HH:MM format.`); return; }
+    if (!Number.isFinite(duration) || duration < 10) { errors.push(`Row ${rowNo}: duration must be at least 10 minutes.`); return; }
+    if (!sectionTokens.length) { errors.push(`Row ${rowNo}: add sections or use ALL.`); return; }
+    if (teacherStart && !isValidCsvTime(teacherStart)) { errors.push(`Row ${rowNo}: teacherStart must use 24-hour HH:MM format.`); return; }
+    if (toMinutes(start) + duration > toMinutes(data.settings.dayEnd)) { errors.push(`Row ${rowNo}: the fixed slot ends after the school day at ${formatTime(data.settings.dayEnd)}.`); return; }
+    if ((type === 'subject' || type === 'batch') && roomMode === 'manual' && !roomName) { errors.push(`Row ${rowNo}: a manual room assignment requires a room name.`); return; }
+
+    const key = fixedCsvGroupKey(record, type, title, dayResult.days, start, duration);
+    const parsed = { rowNo, type, title, days: dayResult.days, start, duration, sectionTokens, subjectName, teacherName, roomMode, roomName, offeringTitle, teacherStart, displayKey: String(getCsvValue(record, ['key', 'activityKey', 'fixedKey', 'group', 'groupKey']) || key).trim() };
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(parsed);
+  });
+
+  if (!groups.size) {
+    const details = errors.length ? `\n\n${errors.slice(0, 12).join('\n')}${errors.length > 12 ? `\n…and ${errors.length - 12} more issue(s).` : ''}` : '';
+    return showAlert(`No valid fixed activity rows were found.${details}`, 'error');
+  }
+
+  const liveData = data;
+  data = normalizeData(JSON.parse(JSON.stringify(liveData)));
+  const createMissing = Boolean(els.fixedCsvCreateMissing?.checked);
+  const created = { teachers: 0, subjects: 0, sections: 0, rooms: 0 };
+  let added = 0, updated = 0, skipped = blankRows;
+
+  for (const [groupKey, groupRows] of groups.entries()) {
+    const beforeGroup = normalizeData(JSON.parse(JSON.stringify(data)));
+    const groupCreated = { teachers: 0, subjects: 0, sections: 0, rooms: 0 };
+    try {
+      const activity = buildFixedActivityFromCsvGroup(groupKey, groupRows, { createMissing, created: groupCreated });
+      const existingIndex = data.fixedActivities.findIndex(item => normalizeCsvLookup(item.csvKey) === groupKey);
+      const existingActivity = existingIndex >= 0 ? data.fixedActivities[existingIndex] : null;
+      if (existingActivity) activity.id = existingActivity.id;
+
+      const fixedWithoutCurrent = data.fixedActivities.filter((item, index) => index !== existingIndex);
+      const existingSchedules = [...expandFixedActivities({ fixedActivities: fixedWithoutCurrent }), ...data.schedules];
+      const candidates = expandFixedActivities({ fixedActivities: [activity] });
+      const checkedCandidates = [];
+      for (const candidate of candidates) {
+        const conflicts = getConflictsInList(candidate, [...existingSchedules, ...checkedCandidates]);
+        if (conflicts.length) throw new Error(conflicts[0]);
+        checkedCandidates.push(candidate);
+      }
+
+      if (existingActivity && fixedCsvComparable(existingActivity) === fixedCsvComparable(activity)) {
+        skipped++;
+      } else if (existingIndex >= 0) {
+        data.fixedActivities[existingIndex] = activity;
+        updated++;
+      } else {
+        data.fixedActivities.push(activity);
+        added++;
+      }
+      Object.keys(created).forEach(key => { created[key] += groupCreated[key]; });
+      if (activity.title.toLowerCase().includes('flag ceremony') && activity.days.includes('Monday')) {
+        data.settings = normalizeSettings(data.settings);
+        data.settings.dayStarts.Monday = getEndTime(activity.start, activity.duration);
+      }
+    } catch (error) {
+      data = beforeGroup;
+      errors.push(`Key ${groupRows[0].displayKey || groupKey}: ${error.message || 'Could not import this fixed activity.'}`);
+    }
+  }
+
+  if (!added && !updated) {
+    data = liveData;
+    const issueSummary = errors.length ? `\n\nIssues found:\n${errors.slice(0, 12).join('\n')}${errors.length > 12 ? `\n…and ${errors.length - 12} more issue(s).` : ''}` : '';
+    return showAlert(`No fixed activities were added or updated. ${skipped} row/group(s) were unchanged or blank.${issueSummary}`, errors.length ? 'error' : 'warning');
+  }
+
+  saveData();
+  renderAll();
+  if (els.fixedCsvFile) els.fixedCsvFile.value = '';
+  const creationSummary = Object.entries(created).filter(([, count]) => count).map(([key, count]) => `${count} ${key}`);
+  const issueSummary = errors.length ? `\n\nIssues found:\n${errors.slice(0, 10).join('\n')}${errors.length > 10 ? `\n…and ${errors.length - 10} more issue(s).` : ''}` : '';
+  showAlert(`Fixed activity CSV import finished: ${added} added, ${updated} updated, ${skipped} unchanged/blank.${creationSummary.length ? ` Created: ${creationSummary.join(', ')}.` : ''}${issueSummary}`, errors.length ? 'warning' : 'success');
+}
+
+function confirmClearFixedActivities() {
+  const fixedCount = data.fixedActivities.length;
+  if (!fixedCount) return showAlert('There are no fixed schedules to clear.', 'warning');
+  openConfirmModal({
+    title: 'Clear All Fixed Schedules?',
+    message: `This will delete ${fixedCount} fixed schedule${fixedCount === 1 ? '' : 's'}, including lunch/SWP blocks, flag activities, fixed subjects, and batch-wide activities. Sections, subjects, teachers, rooms, teaching loads, and generated weekly classes will be preserved.`,
+    confirmLabel: 'Clear Fixed Schedules',
+    onConfirm: clearAllFixedActivities
+  });
+}
+
+async function clearAllFixedActivities() {
+  if (activePushPromise) {
+    const pendingSaveCompleted = await activePushPromise;
+    if (!pendingSaveCompleted) {
+      return showAlert('Fixed schedules were not cleared because a pending MongoDB save could not be completed. Review the latest server data and try again.', 'warning');
+    }
+  }
+
+  clearTimeout(pushTimer);
+  pushTimer = null;
+  const fixedCount = data.fixedActivities.length;
+  if (!fixedCount) return showAlert('There are no fixed schedules to clear.', 'warning');
+
+  data.fixedActivities = [];
+  resetFixedActivityFormMode();
+  if (els.fixedCsvFile) els.fixedCsvFile.value = '';
+  saveData({ localOnly: Boolean(syncConfig.enabled) });
+  renderAll();
+
+  if (!syncConfig.enabled) {
+    showAlert(`${fixedCount} fixed schedule${fixedCount === 1 ? '' : 's'} cleared. You can now upload a fresh CSV file.`);
+    return;
+  }
+
+  const saved = await pushToServer({ silent: true });
+  if (!saved) {
+    return showAlert('The fixed schedules were cleared locally, but the change could not be confirmed in MongoDB. Check the sync status, then use Push to Server before importing a new CSV.', 'warning');
+  }
+  showAlert(`${fixedCount} fixed schedule${fixedCount === 1 ? '' : 's'} cleared and saved to MongoDB. You can now upload a fresh CSV file.`);
+}
+
 function validateCoreDataForScheduling() {
   if (!data.sections.length || !data.subjects.length) {
     showAlert('Add at least one section and subject first.', 'warning');
@@ -2417,7 +3222,7 @@ function renderWaitlistList() {
       </div>
       <span class="item-actions">
         <button type="button" class="secondary compact-btn" data-waitlist-load="${escapeHtml(item.id)}">Load to Form</button>
-        <button type="button" class="secondary compact-btn" data-waitlist-place="${escapeHtml(item.id)}">Try Auto-Place</button>
+        <button type="button" class="secondary compact-btn" data-waitlist-place="${escapeHtml(item.id)}">Try Auto-Place (&gt;4/day)</button>
         <button type="button" class="icon-btn compact-btn" data-waitlist-remove="${escapeHtml(item.id)}">Remove</button>
       </span>
     </li>`).join('');
@@ -2458,22 +3263,26 @@ function loadWaitlistToForm(id) {
   if (els.roomMode.value === 'manual') els.manualRoom.value = item.roomId || '';
   closeControlModal();
   window.scrollTo({ top: 0, behavior: 'smooth' });
-  showAlert('Unplaced class loaded. Choose a valid day/time, then click Add. It will be removed from the waitlist after saving.');
+  showAlert('Unplaced class loaded. Choose a valid day/time, then click Add. Waitlist placement may exceed the teacher four-classes-per-day limit, but all collision, lunch, fixed-activity, start-time, and school-hour rules remain active.');
 }
 function placeWaitlistItem(id, options = {}) {
   const item = (data.scheduleWaitlist || []).find(wait => wait.id === id);
   if (!item) return { placed: false, reason: 'Waitlist item not found.' };
   const load = loadFromWaitlistItem(item);
   const working = [...expandFixedActivities(data), ...data.schedules.map(schedule => ({ ...schedule }))];
-  const scheduled = findSlotForLoad(load, working, Number(item.meetingIndex || 0), { seed: Number(data.generatorRun || 0) + 1, reshuffle: true });
+  const scheduled = findSlotForLoad(load, working, Number(item.meetingIndex || 0), {
+    seed: Number(data.generatorRun || 0) + 1,
+    reshuffle: true,
+    ignoreTeacherDailyClassLimit: true
+  });
   if (!scheduled) {
-    if (!options.silent) showAlert('Still no available slot for this waitlisted class.', 'warning');
+    if (!options.silent) showAlert('Still no available slot for this waitlisted class, even after allowing more than four teacher classes in a day.', 'warning');
     return { placed: false, reason: 'Still no available conflict-free slot.' };
   }
   data.schedules.push(scheduled);
   data.scheduleWaitlist = (data.scheduleWaitlist || []).filter(wait => wait.id !== id);
   saveData(); renderAll();
-  if (!options.silent) showAlert(`Waitlisted class placed at ${scheduled.day}, ${timeRange(scheduled.start, scheduled.duration)}.`);
+  if (!options.silent) showAlert(`Waitlisted class placed at ${scheduled.day}, ${timeRange(scheduled.start, scheduled.duration)} using the waitlist daily-cap override.`);
   return { placed: true, schedule: scheduled };
 }
 function tryPlaceAllWaitlisted() {
@@ -2485,7 +3294,7 @@ function tryPlaceAllWaitlisted() {
     if (result.placed) placed++;
   });
   saveData(); renderAll();
-  showAlert(`${placed} waitlisted class${placed === 1 ? '' : 'es'} placed. ${(data.scheduleWaitlist || []).length} remain in the queue.`, placed ? 'success' : 'warning');
+  showAlert(`${placed} waitlisted class${placed === 1 ? '' : 'es'} placed using the waitlist override for the teacher daily class cap. ${(data.scheduleWaitlist || []).length} remain in the queue.`, placed ? 'success' : 'warning');
 }
 function autoSortNoise(seed, key, scale = 1) {
   if (!seed) return 0;
@@ -2500,9 +3309,22 @@ function autoSortNoise(seed, key, scale = 1) {
 
 function getDayScore(day, schedules, load) {
   const classItems = getClassItemsOnly(schedules);
-  const sectionCount = classItems.filter(item => item.day === day && item.sectionId === load.sectionId).length;
+  const sectionItems = classItems.filter(item => item.day === day && item.sectionId === load.sectionId);
+  const sectionCount = sectionItems.length;
+  const sectionMinutes = sectionItems.reduce((sum, item) => sum + Number(item.duration || data.settings.slotDuration || 50), 0);
   const totalCount = classItems.filter(item => item.day === day).length;
-  if (!load.teacherId) return sectionCount * 10 + totalCount * 0.75;
+  const sectionTightness = getSectionTightnessScore(load.sectionId);
+  const remainingMinutes = getSectionRemainingLoadMinutes(load.sectionId, schedules);
+  const projectedSectionMinutes = sectionMinutes + Number(load.duration || 50);
+  const totalRequiredForSection = (data.teachingLoads || [])
+    .filter(item => item.sectionId === load.sectionId)
+    .reduce((sum, item) => sum + Number(item.meetings || 1) * Number(item.duration || data.settings.slotDuration || 50), 0);
+  const targetSectionMinutes = Math.max(Number(load.duration || 50), totalRequiredForSection / DAYS.length);
+  const sectionOverTargetPenalty = Math.max(0, projectedSectionMinutes - targetSectionMinutes) * 1.1;
+  // A stronger minute-based day balance prevents the generator from exhausting
+  // Monday morning, then Tuesday, and so on before considering underfilled days.
+  const sectionBalancePenalty = sectionMinutes * 0.7 + sectionCount * 12 + sectionOverTargetPenalty;
+  if (!load.teacherId) return sectionBalancePenalty + totalCount * 0.75 - sectionTightness * 18 - remainingMinutes * 0.015;
   const teacherDayCount = getTeacherDayCount(schedules, load.teacherId, day);
   const teacherDayMinutes = getTeacherDayMinutes(schedules, load.teacherId, day);
   const teacherTotalMinutes = getTeacherTotalLoadMinutes(load.teacherId);
@@ -2515,16 +3337,19 @@ function getDayScore(day, schedules, load) {
   const newDaySpreadBonus = teacherDayMinutes === 0 ? -35 : 0;
   const stillNeedsSpreadBonus = teacherDayMinutes === 0 && activeDays < minimumSpreadDays ? -45 : 0;
   const teacherConcentrationPenalty = teacherDayCount * 55 + teacherDayMinutes * 0.55 + overTargetPenalty;
-  return sectionCount * 10 + teacherConcentrationPenalty + totalCount * 0.75 + newDaySpreadBonus + stillNeedsSpreadBonus;
+  return sectionBalancePenalty + teacherConcentrationPenalty + totalCount * 0.75 + newDaySpreadBonus + stillNeedsSpreadBonus - sectionTightness * 18 - remainingMinutes * 0.015;
 }
 function findSlotForLoad(load, schedules, meetingIndex, options = {}) {
   const teacherStart = load.teacherId ? toMinutes(getTeacherStartTime(load.teacherId)) : 0;
   const seed = Number(options.seed || 0);
-  const sortedDays = [...DAYS].sort((a,b) => {
+  let sortedDays = [...DAYS].sort((a,b) => {
     const scoreA = getDayScore(a, schedules, load) + autoSortNoise(seed, `${load.id}:${load.sectionId}:${load.subjectId}:${meetingIndex}:${a}`, options.reshuffle ? 18 : 3);
     const scoreB = getDayScore(b, schedules, load) + autoSortNoise(seed, `${load.id}:${load.sectionId}:${load.subjectId}:${meetingIndex}:${b}`, options.reshuffle ? 18 : 3);
     return scoreA - scoreB || ((DAYS.indexOf(a) + meetingIndex) % DAYS.length) - ((DAYS.indexOf(b) + meetingIndex) % DAYS.length);
   });
+  if (options.forceDay) {
+    sortedDays = options.strictDay ? [options.forceDay] : [options.forceDay, ...sortedDays.filter(day => day !== options.forceDay)];
+  }
   const consecutiveModes = load.teacherId ? [true, false] : [false];
   for (const protectTeacherBreaks of consecutiveModes) {
     for (const avoidSameSubjectDay of [true, false]) {
@@ -2533,13 +3358,21 @@ function findSlotForLoad(load, schedules, meetingIndex, options = {}) {
         const daySlots = generateSlots(day, { sectionId: load.sectionId });
         const dayEnd = toMinutes(getDayEnd(day));
         const sortedSlots = [...daySlots].sort((a,b) => {
-          const sectionA = schedules.filter(item => item.day === day && item.sectionId === load.sectionId && toMinutes(item.start) < toMinutes(a)).length;
-          const sectionB = schedules.filter(item => item.day === day && item.sectionId === load.sectionId && toMinutes(item.start) < toMinutes(b)).length;
           const wellnessA = getTeacherSlotWellnessPenalty(load, schedules, day, a);
           const wellnessB = getTeacherSlotWellnessPenalty(load, schedules, day, b);
-          const base = wellnessA - wellnessB || sectionA - sectionB || toMinutes(a) - toMinutes(b);
-          if (!options.reshuffle) return base;
-          return base + autoSortNoise(seed, `${load.id}:${day}:${a}:${meetingIndex}`, 12) - autoSortNoise(seed, `${load.id}:${day}:${b}:${meetingIndex}`, 12);
+          const swpA = isSwpLoad(load) ? getSwpPreferredSlotPenalty(a) : 0;
+          const swpB = isSwpLoad(load) ? getSwpPreferredSlotPenalty(b) : 0;
+          const transitionA = isStudentTransitionSubject(load) ? (hasStudentTransitionBuffer({ ...load, day, start: a, duration: Number(load.duration || 50) }, schedules) ? 0 : 9000) : 0;
+          const transitionB = isStudentTransitionSubject(load) ? (hasStudentTransitionBuffer({ ...load, day, start: b, duration: Number(load.duration || 50) }, schedules) ? 0 : 9000) : 0;
+          const softA = getCandidateSoftScore({ id: '__score_a__', sectionId: load.sectionId, subjectId: load.subjectId, teacherId: load.teacherId, day, start: a, duration: Number(load.duration || 50), roomId: load.roomId || DEFAULT_ROOM_ID, roomMode: load.roomMode || 'default' }, schedules);
+          const softB = getCandidateSoftScore({ id: '__score_b__', sectionId: load.sectionId, subjectId: load.subjectId, teacherId: load.teacherId, day, start: b, duration: Number(load.duration || 50), roomId: load.roomId || DEFAULT_ROOM_ID, roomMode: load.roomMode || 'default' }, schedules);
+          const base = transitionA - transitionB || softA - softB || wellnessA - wellnessB || swpA - swpB;
+          // Stable seeded tie-breaking removes the old chronological bias that
+          // preferred the earliest remaining slot whenever scores were equal.
+          const noiseScale = options.reshuffle ? 12 : 4;
+          const noiseA = autoSortNoise(seed || 1, `${load.id}:${day}:${a}:${meetingIndex}:slot`, noiseScale);
+          const noiseB = autoSortNoise(seed || 1, `${load.id}:${day}:${b}:${meetingIndex}:slot`, noiseScale);
+          return base || noiseA - noiseB || toMinutes(a) - toMinutes(b);
         });
         for (const start of sortedSlots) {
           if (toMinutes(start) < teacherStart) continue;
@@ -2553,7 +3386,10 @@ function findSlotForLoad(load, schedules, meetingIndex, options = {}) {
           }
           const candidate = { id: createId('sched'), sectionId: load.sectionId, subjectId: load.subjectId, teacherId: load.teacherId, day, start, duration: Number(load.duration || 50), roomId, roomMode: load.roomMode || 'default', sourceLoadId: load.id };
           if (protectTeacherBreaks && candidateExceedsTeacherConsecutiveLimit(candidate, schedules)) continue;
-          if (!getConflictsInList(candidate, schedules).length) return candidate;
+          const candidateConflicts = getConflictsInList(candidate, schedules, null, options);
+          if (!candidateConflicts.length) return candidate;
+          const adjustedCandidate = tryBuildTransitionBufferAdjustment(candidate, schedules, data, options);
+          if (adjustedCandidate) return adjustedCandidate;
         }
       }
     }
@@ -2570,11 +3406,18 @@ function buildExpandedTeachingLoadMeetings() {
 function getLoadGenerationPriority(load) {
   const roomPriority = mode => mode === 'manual' ? 0 : mode === 'auto' ? 1 : 2;
   const hasTeacher = Boolean(load.teacherId);
+  const duration = Number(load.duration || 50);
+  const swpPenalty = isSwpLoad(load) ? -1800 : 0; // SWP remains an anchor but should not consume every premium slot before long labs.
+  const transitionPriority = isStudentTransitionSubject(load) ? -3200 : 0;
   return (
-    (hasTeacher ? getTeacherTotalLoadMinutes(load.teacherId) * -1 : 0) +
+    swpPenalty +
+    transitionPriority +
+    duration * -42 +
+    getSectionTightnessScore(load.sectionId) * -2400 +
+    (hasTeacher ? getTeacherTotalLoadMinutes(load.teacherId) * -0.65 : 0) +
     (hasTeacher ? toMinutes(getTeacherStartTime(load.teacherId)) * 0.08 : 120) +
     roomPriority(load.roomMode) * 250 +
-    Number(load.duration || 50) * -2 +
+    (!isSwpLoad(load) && duration <= 30 ? 1400 : 0) +
     Number(load.meetings || 1) * -40
   );
 }
@@ -2585,15 +3428,12 @@ function sortExpandedLoadsForGeneration(expanded, options = {}) {
     const priorityA = getLoadGenerationPriority(a);
     const priorityB = getLoadGenerationPriority(b);
     if (!randomized) return priorityA - priorityB || String(a.id).localeCompare(String(b.id)) || Number(a.meetingIndex || 0) - Number(b.meetingIndex || 0);
-    const priorityWeight = Number(options.priorityWeight ?? 0.18);
-    const jitterA = autoSortNoise(seed, `${a.id}:${a.sectionId}:${a.subjectId}:${a.teacherId}:${a.meetingIndex}:load`, 1000);
-    const jitterB = autoSortNoise(seed, `${b.id}:${b.sectionId}:${b.subjectId}:${b.teacherId}:${b.meetingIndex}:load`, 1000);
+    const priorityWeight = Number(options.priorityWeight ?? 1);
+    const jitterScale = Number(options.jitterScale ?? 140);
+    const jitterA = autoSortNoise(seed, `${a.id}:${a.sectionId}:${a.subjectId}:${a.teacherId}:${a.meetingIndex}:load`, jitterScale);
+    const jitterB = autoSortNoise(seed, `${b.id}:${b.sectionId}:${b.subjectId}:${b.teacherId}:${b.meetingIndex}:load`, jitterScale);
     return (priorityA * priorityWeight + jitterA) - (priorityB * priorityWeight + jitterB);
   });
-  if (randomized && sorted.length > 1) {
-    const offset = Math.floor(autoSortNoise(seed, 'start-offset', sorted.length)) % sorted.length;
-    return [...sorted.slice(offset), ...sorted.slice(0, offset)];
-  }
   return sorted;
 }
 function validateAutoGenerationInputs() {
@@ -2604,55 +3444,210 @@ function validateAutoGenerationInputs() {
   if (data.teachingLoads.some(load => load.roomMode === 'auto' && !data.rooms.length)) { showAlert('At least one teaching load requires auto lab/room assignment, but no laboratory/special rooms have been added.', 'warning'); return false; }
   return true;
 }
+
+function buildCandidateForLoadAt(load, day, start, schedules) {
+  const duration = Number(load.duration || data.settings.slotDuration || 50);
+  if (load.teacherId && toMinutes(start) < toMinutes(getTeacherStartTime(load.teacherId))) return null;
+  if (toMinutes(start) + duration > toMinutes(getDayEnd(day))) return null;
+  let roomId = DEFAULT_ROOM_ID;
+  if (load.roomMode === 'manual') roomId = load.roomId;
+  if (load.roomMode === 'auto') {
+    const room = findAutoRoomInList(load.sectionId, day, start, duration, schedules);
+    if (!room) return null;
+    roomId = room.id;
+  }
+  return { id: createId('sched'), sectionId: load.sectionId, subjectId: load.subjectId, teacherId: load.teacherId, day, start, duration, roomId, roomMode: load.roomMode || 'default', sourceLoadId: load.id };
+}
+function getDirectBlockingSchedules(candidate, schedules = []) {
+  if (!candidate) return [];
+  const blockers = [];
+  schedules.forEach(existing => {
+    if (!existing || existing.id === candidate.id || existing.day !== candidate.day) return;
+    if (!overlaps(candidate.start, candidate.duration, existing.start, existing.duration)) return;
+    const sameSection = existing.sectionId && candidate.sectionId && existing.sectionId === candidate.sectionId;
+    const sameTeacher = isClassLikeSchedule(existing) && isClassLikeSchedule(candidate) && existing.teacherId && existing.teacherId === candidate.teacherId;
+    const sameRoom = isClassLikeSchedule(existing) && isClassLikeSchedule(candidate) && !isDefaultRoom(candidate.roomId) && !isDefaultRoom(existing.roomId) && existing.roomId === candidate.roomId;
+    if (sameSection || sameTeacher || sameRoom) blockers.push(existing);
+  });
+  return [...new Map(blockers.map(item => [item.id, item])).values()];
+}
+function loadFromScheduleForGeneration(schedule) {
+  return {
+    id: schedule.sourceLoadId || schedule.id,
+    sectionId: schedule.sectionId,
+    subjectId: schedule.subjectId,
+    teacherId: schedule.teacherId,
+    duration: Number(schedule.duration || data.settings.slotDuration || 50),
+    roomMode: schedule.roomMode || (isDefaultRoom(schedule.roomId) ? 'default' : 'manual'),
+    roomId: schedule.roomId,
+    meetings: 1
+  };
+}
+function applyScheduledCandidateToWorking(scheduled, working) {
+  if (!scheduled) return working;
+  if (Array.isArray(scheduled.__adjustments) && scheduled.__adjustments.length) {
+    scheduled.__adjustments.forEach(adjustment => {
+      const target = working.find(item => item.id === adjustment.id);
+      if (target) Object.assign(target, adjustment.patch || {});
+    });
+    delete scheduled.__adjustments;
+  }
+  working.push(scheduled);
+  return working;
+}
+function tryRepairLoadByEjection(load, working, meetingIndex = 0, options = {}) {
+  const days = [...DAYS].sort((a, b) => getDayScore(a, working, load) - getDayScore(b, working, load));
+  for (const day of days) {
+    const slots = generateSlots(day, { sectionId: load.sectionId })
+      .sort((a, b) => toMinutes(a) - toMinutes(b));
+    for (const start of slots) {
+      const candidate = buildCandidateForLoadAt(load, day, start, working);
+      if (!candidate) continue;
+      if (candidateExceedsTeacherConsecutiveLimit(candidate, working)) continue;
+      const blockers = getDirectBlockingSchedules(candidate, working).filter(item => !isFixedSchedule(item));
+      if (blockers.length !== 1) continue;
+      const blocker = blockers[0];
+      const withoutBlocker = working.filter(item => item.id !== blocker.id);
+      if (getConflictsInList(candidate, withoutBlocker, candidate.id).length) continue;
+      const withCandidate = [...withoutBlocker, candidate];
+      const blockerLoad = loadFromScheduleForGeneration(blocker);
+      const moved = findSlotForLoad(blockerLoad, withCandidate, 0, { ...options, reshuffle: true, randomize: true, repair: true, seed: Number(options.seed || 0) + 313 });
+      if (!moved) continue;
+      const repaired = [...withoutBlocker, candidate];
+      applyScheduledCandidateToWorking(moved, repaired);
+      return { placed: true, working: repaired, movedBlocker: blocker, candidate, moved };
+    }
+  }
+  return { placed: false };
+}
+function repairFailuresWithEjection(failures, working, options = {}) {
+  const remaining = [];
+  let current = working;
+  const ordered = [...failures].sort((a, b) => Number(b.duration || 50) - Number(a.duration || 50));
+  ordered.forEach(waitItem => {
+    const load = loadFromWaitlistItem(waitItem);
+    const direct = findSlotForLoad(load, current, Number(waitItem.meetingIndex || 0), { ...options, repair: true, seed: Number(options.seed || 0) + 101 });
+    if (direct) {
+      applyScheduledCandidateToWorking(direct, current);
+      return;
+    }
+    const repaired = tryRepairLoadByEjection(load, current, Number(waitItem.meetingIndex || 0), options);
+    if (repaired.placed) current = repaired.working;
+    else remaining.push(waitItem);
+  });
+  return { working: current, failures: remaining };
+}
+function getScheduleQualityScore(result, source = data) {
+  if (!result) return Number.POSITIVE_INFINITY;
+  const items = [...expandFixedActivities(source), ...(result.generatedSchedules || [])];
+  let fragmentation = 0;
+  (source.sections || []).forEach(section => DAYS.forEach(day => {
+    fragmentation += Math.max(0, getSectionDayFragmentationPenalty(section.id, day, items, null, null, source));
+  }));
+  let consecutive = 0;
+  (source.teachers || []).forEach(teacher => DAYS.forEach(day => {
+    consecutive += getTeacherConsecutiveStats(items, teacher.id, day, null, null, source).maxPeriods > getPreferredMaxTeacherConsecutivePeriods(source) ? 3000 : 0;
+    consecutive += getTeacherConsecutiveStats(items, teacher.id, day, null, null, source).maxPeriods * 45;
+  }));
+  const transitionIssues = getClassItemsOnly(items).filter(item => isStudentTransitionSubject(item, source) && !hasStudentTransitionBuffer(item, items, item.id, source)).length;
+  // Feasibility remains the primary objective. Vacancy distribution only
+  // differentiates schedules with the same or nearly identical placement rate.
+  const waitlistPenalty = (result.failures || []).length * 10000000;
+  return waitlistPenalty + transitionIssues * 500000 + fragmentation * 0.08 + consecutive;
+}
 function runAutoGeneration(options = {}) {
   if (!validateAutoGenerationInputs()) return null;
   const replace = options.replace ?? (els.replaceExistingSchedule?.checked !== false);
   const fixedBase = expandFixedActivities(data);
-  const working = replace ? [...fixedBase] : [...fixedBase, ...data.schedules.map(item => ({ ...item }))];
-  const sortedLoads = sortExpandedLoadsForGeneration(buildExpandedTeachingLoadMeetings(), options);
+  let working = replace ? [...fixedBase] : [...fixedBase, ...data.schedules.map(item => ({ ...item }))];
+  const expandedMeetings = buildExpandedTeachingLoadMeetings();
+  const swpAnchors = expandedMeetings
+    .filter(load => isSwpLoad(load))
+    .sort((a, b) => byName(data.sections, a.sectionId).localeCompare(byName(data.sections, b.sectionId), undefined, { sensitivity: 'base' }) || Number(a.meetingIndex || 0) - Number(b.meetingIndex || 0));
+  const regularLoads = expandedMeetings.filter(load => !isSwpLoad(load));
+  const sortedLoads = [...swpAnchors, ...sortExpandedLoadsForGeneration(regularLoads, options)];
   const failures = [];
   for (const load of sortedLoads) {
-    const scheduled = findSlotForLoad(load, working, load.meetingIndex, options);
+    const isAnchor = isSwpLoad(load);
+    const forcedDay = isAnchor ? DAYS[Number(load.meetingIndex || 0) % DAYS.length] : null;
+    const scheduled = findSlotForLoad(load, working, load.meetingIndex, isAnchor ? { ...options, forceDay: forcedDay, strictDay: true, swpAnchor: true } : options);
     if (!scheduled) {
-      failures.push(createWaitlistItem(load, load.meetingIndex, 'Auto-generation could not find a conflict-free slot.'));
+      failures.push(createWaitlistItem(load, load.meetingIndex, isAnchor ? `SWP could not be placed on ${forcedDay}. Each section can only have one SWP/30-minute block per day.` : 'Auto-generation could not find a conflict-free slot.'));
       continue;
     }
-    working.push(scheduled);
+    applyScheduledCandidateToWorking(scheduled, working);
+  }
+  if (failures.length && options.enableRepair !== false) {
+    const repaired = repairFailuresWithEjection(failures, working, options);
+    working = repaired.working;
+    failures.length = 0;
+    failures.push(...repaired.failures);
   }
   const generatedSchedules = working.filter(item => !isFixedSchedule(item));
-  return { generatedSchedules, fixedCount: fixedBase.length, failures };
+  return { generatedSchedules, fixedCount: fixedBase.length, failures, qualityScore: getScheduleQualityScore({ generatedSchedules, failures }) };
 }
-function commitAutoGeneration(result, options = {}) {
+async function commitAutoGeneration(result, options = {}) {
   data.schedules = result.generatedSchedules;
   data.scheduleWaitlist = result.failures || [];
   data.generatorRun = Number(data.generatorRun || 0) + 1;
-  saveData(); renderAll();
-  if (result.failures.length) {
-    const preview = result.failures.slice(0, 8).map(waitlistLabel).join('\n');
-    const extra = result.failures.length > 8 ? `\n...and ${result.failures.length - 8} more.` : '';
-    showAlert(`Auto-generation completed with a waitlist. ${result.generatedSchedules.length} class entries were saved, but ${result.failures.length} class meeting(s) still need manual placement.\n\nWaitlisted:\n${preview}${extra}\n\nOpen Waitlist / Queue to load them into the manual form or try auto-place again.`, 'warning');
-  } else {
-    showAlert(`${options.reshuffle ? 'Schedule reshuffled' : 'Weekly schedule generated'} successfully. ${result.generatedSchedules.length} class entries plus ${result.fixedCount} protected fixed block(s) are now in the master schedule.`);
+  saveData({ localOnly: true });
+  renderAll();
+
+  const persistence = await persistGeneratedScheduleToServer({
+    basisSignature: options.basisSignature || getGenerationBasisSignature(data),
+    silent: true
+  });
+  const storageNote = syncConfig.enabled
+    ? (persistence.saved ? ` It was also saved to MongoDB revision ${persistence.revision}.` : ' It is currently saved only in this browser because the MongoDB write did not complete.')
+    : '';
+
+  if (!options.suppressAlert) {
+    if (result.failures.length) {
+      const preview = result.failures.slice(0, 8).map(waitlistLabel).join('\n');
+      const extra = result.failures.length > 8 ? `\n...and ${result.failures.length - 8} more.` : '';
+      showAlert(`Auto-generation completed with a waitlist. ${result.generatedSchedules.length} class entries were saved, but ${result.failures.length} class meeting(s) still need manual placement.${storageNote}\n\nWaitlisted:\n${preview}${extra}\n\nOpen Waitlist / Queue to load them into the manual form or try auto-place again.`, 'warning');
+    } else {
+      showAlert(`${options.reshuffle ? 'Schedule reshuffled' : 'Weekly schedule generated'} successfully. ${result.generatedSchedules.length} class entries plus ${result.fixedCount} protected fixed block(s) are now in the master schedule.${storageNote}`, persistence.saved || !syncConfig.enabled ? 'success' : 'warning');
+    }
+  }
+  return persistence;
+}
+async function autoGenerateWeek() {
+  resetGenerationProgress();
+  const basisSignature = getGenerationBasisSignature(data);
+  if (!(await beginGenerationSyncLock())) return;
+  setGenerationButtonsDisabled(true);
+  try {
+    const result = runAutoGeneration({ seed: Number(data.generatorRun || 0) + 1, reshuffle: false });
+    if (!result) return;
+    await commitAutoGeneration(result, { basisSignature });
+  } finally {
+    setGenerationButtonsDisabled(false);
+    endGenerationSyncLock();
   }
 }
-function autoGenerateWeek() {
-  resetGenerationProgress();
-  const result = runAutoGeneration({ seed: Number(data.generatorRun || 0) + 1, reshuffle: false });
-  if (!result) return;
-  commitAutoGeneration(result);
-}
-function reshuffleSchedule() {
+async function reshuffleSchedule() {
   resetGenerationProgress();
   if (!data.teachingLoads.length) return showAlert('Add teaching loads first before generating again.', 'warning');
-  const seed = Date.now() + Number(data.generatorRun || 0) + 1;
-  const result = runAutoGeneration({ seed, reshuffle: true, randomize: true, replace: true, priorityWeight: 0.14 });
-  if (!result) return;
-  commitAutoGeneration(result, { reshuffle: true });
+  const basisSignature = getGenerationBasisSignature(data);
+  if (!(await beginGenerationSyncLock())) return;
+  setGenerationButtonsDisabled(true);
+  try {
+    const seed = Date.now() + Number(data.generatorRun || 0) + 1;
+    const result = runAutoGeneration({ seed, reshuffle: true, randomize: true, replace: true, priorityWeight: 1, jitterScale: 180 });
+    if (!result) return;
+    await commitAutoGeneration(result, { reshuffle: true, basisSignature });
+  } finally {
+    setGenerationButtonsDisabled(false);
+    endGenerationSyncLock();
+  }
 }
-async function tryUntilPerfectSchedule(maxAttempts = 50) {
+async function tryUntilPerfectSchedule(maxAttempts = TRY_UNTIL_PERFECT_MAX_ATTEMPTS) {
   if (!validateAutoGenerationInputs()) return;
+  const basisSignature = getGenerationBasisSignature(data);
   let bestResult = null;
   let bestSeed = null;
+  if (!(await beginGenerationSyncLock())) return;
   setGenerationButtonsDisabled(true);
   setGenerationProgress({ attempt: 0, max: maxAttempts, currentFailures: null, bestFailures: null });
   await sleep(80);
@@ -2660,12 +3655,14 @@ async function tryUntilPerfectSchedule(maxAttempts = 50) {
   try {
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       const seed = Date.now() + Number(data.generatorRun || 0) * 997 + attempt * 7919;
-      const result = runAutoGeneration({ seed, reshuffle: true, randomize: true, replace: true, priorityWeight: attempt % 3 === 0 ? 0.08 : attempt % 3 === 1 ? 0.16 : 0.25 });
+      const result = runAutoGeneration({ seed, reshuffle: true, randomize: true, replace: true, priorityWeight: 1, jitterScale: attempt % 3 === 0 ? 90 : attempt % 3 === 1 ? 160 : 240 });
       if (!result) {
         resetGenerationProgress();
         return;
       }
-      if (!bestResult || result.failures.length < bestResult.failures.length || (result.failures.length === bestResult.failures.length && result.generatedSchedules.length > bestResult.generatedSchedules.length)) {
+      const resultScore = result.qualityScore ?? getScheduleQualityScore(result);
+      const bestScore = bestResult ? (bestResult.qualityScore ?? getScheduleQualityScore(bestResult)) : Number.POSITIVE_INFINITY;
+      if (!bestResult || resultScore < bestScore || (resultScore === bestScore && result.generatedSchedules.length > bestResult.generatedSchedules.length)) {
         bestResult = result;
         bestSeed = seed;
       }
@@ -2681,7 +3678,7 @@ async function tryUntilPerfectSchedule(maxAttempts = 50) {
       await sleep(25);
 
       if (!result.failures.length) {
-        commitAutoGeneration(result, { reshuffle: true });
+        const persistence = await commitAutoGeneration(result, { reshuffle: true, basisSignature, suppressAlert: true });
         setGenerationProgress({
           attempt,
           max: maxAttempts,
@@ -2691,13 +3688,16 @@ async function tryUntilPerfectSchedule(maxAttempts = 50) {
           status: 'done',
           seed
         });
-        showAlert(`Perfect schedule found after ${attempt} attempt${attempt === 1 ? '' : 's'}. All classes were allocated without conflicts.`);
+        const mongoNote = syncConfig.enabled
+          ? (persistence.saved ? ` The schedule was saved to MongoDB revision ${persistence.revision}.` : ' The schedule is currently stored only in this browser; check MongoDB Sync before leaving the page.')
+          : '';
+        showAlert(`Perfect schedule found after ${attempt} attempt${attempt === 1 ? '' : 's'}. All classes were allocated without conflicts.${mongoNote}`, persistence.saved || !syncConfig.enabled ? 'success' : 'warning');
         return;
       }
     }
 
     if (!bestResult) return;
-    commitAutoGeneration(bestResult, { reshuffle: true });
+    const persistence = await commitAutoGeneration(bestResult, { reshuffle: true, basisSignature, suppressAlert: true });
     setGenerationProgress({
       attempt: maxAttempts,
       max: maxAttempts,
@@ -2707,17 +3707,21 @@ async function tryUntilPerfectSchedule(maxAttempts = 50) {
       status: bestResult.failures.length ? 'warning' : 'done',
       seed: bestSeed
     });
-    showAlert(`No perfect schedule was found after ${maxAttempts} randomized attempts. The best attempt was saved with ${bestResult.failures.length} unplaced class meeting${bestResult.failures.length === 1 ? '' : 's'} in the waitlist. Try again, adjust loads, extend the school day, or manually place the remaining items.`, bestResult.failures.length ? 'warning' : 'success');
+    const mongoNote = syncConfig.enabled
+      ? (persistence.saved ? ` The schedule was saved to MongoDB revision ${persistence.revision}.` : ' The schedule is currently stored only in this browser; check MongoDB Sync before leaving the page.')
+      : '';
+    showAlert(`No perfect schedule was found after ${maxAttempts} randomized attempts. The best attempt was saved with ${bestResult.failures.length} unplaced class meeting${bestResult.failures.length === 1 ? '' : 's'} in the waitlist.${mongoNote} Try again, adjust loads, extend the school day, or manually place the remaining items.`, bestResult.failures.length || (syncConfig.enabled && !persistence.saved) ? 'warning' : 'success');
   } finally {
     setGenerationButtonsDisabled(false);
+    endGenerationSyncLock();
   }
 }
 function confirmTryUntilPerfectSchedule() {
   openConfirmModal({
     title: 'Try Until Perfect?',
-    message: 'The system will run up to 50 randomized auto-generation attempts using different seeds and starting classes. It will save the first perfect schedule it finds. If none is found, it will keep the best attempt and place remaining classes in the waitlist.',
+    message: `The system will run up to ${TRY_UNTIL_PERFECT_MAX_ATTEMPTS} randomized auto-generation attempts using different seeds and starting classes. It will save the first perfect schedule it finds. If none is found, it will keep the best attempt and place remaining classes in the waitlist.`,
     confirmLabel: 'Start Attempts',
-    onConfirm: () => tryUntilPerfectSchedule(50)
+    onConfirm: () => tryUntilPerfectSchedule(TRY_UNTIL_PERFECT_MAX_ATTEMPTS)
   });
 }
 
@@ -2826,6 +3830,9 @@ if (els.loadClearSections) els.loadClearSections.addEventListener('click', () =>
 if (els.loadSelectMatchingSections) els.loadSelectMatchingSections.addEventListener('click', selectMatchingLoadSections);
 if (els.loadCsvTemplateBtn) els.loadCsvTemplateBtn.addEventListener('click', downloadTeachingLoadTemplate);
 if (els.loadCsvImportBtn) els.loadCsvImportBtn.addEventListener('click', importTeachingLoadsFromCsv);
+if (els.fixedClearAllBtn) els.fixedClearAllBtn.addEventListener('click', confirmClearFixedActivities);
+if (els.fixedCsvTemplateBtn) els.fixedCsvTemplateBtn.addEventListener('click', downloadFixedActivityTemplate);
+if (els.fixedCsvImportBtn) els.fixedCsvImportBtn.addEventListener('click', importFixedActivitiesFromCsv);
 els.roomMode.addEventListener('change', () => els.manualRoomWrap.classList.toggle('hidden', els.roomMode.value !== 'manual'));
 els.loadRoomMode.addEventListener('change', () => els.loadManualRoomWrap.classList.toggle('hidden', els.loadRoomMode.value !== 'manual'));
 els.scheduleForm.addEventListener('submit', e => {
@@ -2839,7 +3846,10 @@ els.scheduleForm.addEventListener('submit', e => {
   if (toMinutes(item.start) + duration > toMinutes(getDayEnd(item.day))) return showAlert(`This class goes beyond the ${item.day} school day end time.`, 'error');
   if (mode === 'manual' && !item.roomId) return showAlert('Choose a manual lab/room first.', 'warning');
   if (mode === 'auto' && !item.roomId) return showAlert('No available lab/special room found for this time. Try another time or add more rooms.', 'error');
-  const conflicts = getConflicts(item, editingId);
+  const scheduleConflictOptions = pendingWaitlistId
+    ? WAITLIST_SCHEDULE_CONFLICT_OPTIONS
+    : MANUAL_SCHEDULE_CONFLICT_OPTIONS;
+  const conflicts = getConflicts(item, editingId, scheduleConflictOptions);
   if (conflicts.length) return showAlert(conflicts[0], 'error');
   if (editingId) {
     const index = data.schedules.findIndex(schedule => schedule.id === editingId);
@@ -2900,7 +3910,7 @@ document.body.addEventListener('change', e => {
   const schedule = data.schedules.find(item => item.id === sel.dataset.roomUpdate); if (!schedule) return;
   const oldRoom = schedule.roomId; const oldMode = schedule.roomMode;
   schedule.roomId = sel.value || DEFAULT_ROOM_ID; schedule.roomMode = isDefaultRoom(schedule.roomId) ? 'default' : 'manual';
-  const conflicts = getConflicts(schedule, schedule.id);
+  const conflicts = getConflicts(schedule, schedule.id, MANUAL_SCHEDULE_CONFLICT_OPTIONS);
   if (conflicts.length) { schedule.roomId = oldRoom; schedule.roomMode = oldMode; sel.value = oldRoom; return showAlert(conflicts[0], 'error'); }
   saveData(); renderScheduleTable(); showAlert(`Room updated to ${roomName(schedule.roomId)}.`);
 });
